@@ -9,4 +9,7 @@ pub mod part;
 pub use part::Part;
 
 pub mod signal;
-pub use signal::Signal;
+pub mod state;
+
+mod tool_snapshot;
+use tool_snapshot::ToolSnapshot;

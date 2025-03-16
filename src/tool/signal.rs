@@ -1,9 +1,13 @@
-use super::part::Part;
+use actix::prelude::Message;
 
-pub enum Signal {
-    Start,
-    Stop,
-    LoadPart(Part),
-    UnloadPart,
-    ProcessFinished
-}
+use super::ToolSnapshot;
+
+
+#[derive(Message)]
+#[rtype(result = "ToolSnapshot")]
+pub struct Start;
+
+#[derive(Message)]
+#[rtype(result = "ToolSnapshot")]
+pub struct Stop;
+

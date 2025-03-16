@@ -1,11 +1,22 @@
-use std::cell::RefCell;
+use std::fmt::{self, Display};
 
-use super::tool_entity::ToolEntity;
+#[derive(Debug, Clone, Copy)]
+pub enum ToolState {
+    STOPPED,
+    IDLE,
+    RUNNING,
+    STOPPING,
+    FAULTED
+}
 
-
-pub trait State {
-    fn entity(self) -> ToolEntity;
-    fn enter(&mut self);
-    fn execute(&mut self);
-    fn exit(&mut self);
+impl Display for ToolState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ToolState::STOPPED => write!(f, "STOPPED"),
+            ToolState::IDLE => write!(f, "IDLE"),
+            ToolState::RUNNING => write!(f, "RUNNING"),
+            ToolState::STOPPING => write!(f, "STOPPING"),
+            ToolState::FAULTED => write!(f, "FAULTED")
+        }
+    }
 }

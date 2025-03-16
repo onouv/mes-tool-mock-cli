@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 actix ="0.13.5"
+response_channel = "0.1.0"

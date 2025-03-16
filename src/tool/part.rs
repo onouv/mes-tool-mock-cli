@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub struct Part {
     serial_no: String,
     part_no: String
