@@ -1,19 +1,10 @@
 mod tool;
-use tool::*;
+use tool::Tool;
 
-fn main() {
-    let tool = Tool::new("1");
-    // println!("{}", tool);
+use actix::prelude::*;
 
-    let tool = tool.handle(Signal::Start);
-    // println!("{}", tool);
+#[actix::main]
+async fn main() {
+    let tool_1 = Tool::new("1", ).start();
     
-    let tool = tool.handle(Signal::LoadPart(Part {}));
-    // println!("{}", tool);
-    let tool = tool.handle(Signal::LoadPart(Part {}));
-    // println!("{}", tool);
-    let tool = tool.handle(Signal::LoadPart(Part {}));
-    // println!("{}", tool);
-    let tool = tool.handle(Signal::UnloadPart);
-    // println!("{}", tool);
 }
