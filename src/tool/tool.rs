@@ -1,6 +1,3 @@
-use std::collections::VecDeque;
-use std::fmt::{self, Display};
-
 use super::faulted::Faulted;
 use super::signal::Signal;
 use super::state::State;
@@ -29,6 +26,9 @@ impl Tool {
         Tool::Stopped(Stopped::new(ToolEntity::new(id)))
     }
 
+    
+
+
     /// 
     /// Handles signal for each state.
     /// 
@@ -42,9 +42,11 @@ impl Tool {
     pub fn handle(self, signal: Signal) -> Self {
         match (self, signal) {
             (Tool::Stopped(stopped), Signal::Start) => {
+                stopped.exit();
                 let entity = stopped.entity();
+                
                 if entity.inport_empty() {
-                    stopped.exit();
+                    
                     let idle = Tool::Idle(Idle::new(entity));
                     idle.enter();
                     idle.execute();

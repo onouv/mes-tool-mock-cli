@@ -12,12 +12,15 @@ impl Faulted {
     pub fn new(entity: ToolEntity) -> Self {
         Faulted(entity)
     }
+
+    fn entity(self) -> ToolEntity {
+        self.0
+    }
+
 }
 
 impl State for Faulted {
-    fn entity(&mut self) -> &mut ToolEntity {
-        &mut self.0
-    }
+    
     fn enter(&mut self) {
         println!("Running: enter");
     }

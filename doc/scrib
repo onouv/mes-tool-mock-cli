@@ -1,0 +1,37 @@
+What I meant 10' ago re consuming the tool state out of your wrapper struct:
+
+    pub enum ToolState {
+       Stopped,
+       Idle,
+       Running,
+       Stopping,
+       Fault
+    }
+
+    pub struct Tool {
+        entity: ToolEntity,
+        state: ToolState
+    }
+
+    impl Tool {
+        pub fn handle(self, signal: Signal) ... {
+          let Tool { entity, state } = self;
+
+          ....
+               Tool { entity, state: .. new state }
+        }
+    
+}
+    https://barafael.github.io/More-Actors-with-Tokio/
+
+    https://barafael.github.io/More-Actors-with-Tokio/
+
+    https://bevyengine.org/learn/quick-start/getting-started/ecs/
+
+    https://ryhl.io/blog/actors-with-tokio/
+
+    @olaf
+
+Could you share us a live share link so we can help you with the code?
+
+https://marketplace.visualstudio.com/items?itemName=MS-vsliveshare.vsliveshare

@@ -1,31 +1,36 @@
-use super::{State, ToolEntity};
+use std::cell::RefCell;
+
+use super::{state::State, ToolEntity};
 
 /// A tool in a state which prevents it from running:
 /// - empty input port
 /// - full output port
-pub struct Idle(ToolEntity);
+pub struct Idle {
+    entity: Box<RefCell<ToolEntity>>
+};
 
 impl Idle {
-    pub fn new(entity: ToolEntity) -> Self {
-        Idle (entity)
-    }
+    pub fn new(entity: Box<RefCell<ToolEntity>>) -> Self {
+        Idle { entity }
+   }
 }
+
 
 impl State for Idle {
 
     fn entity(&mut self) -> &mut ToolEntity {
-        &mut self.0
+        self.entity.borrow_mut()
     }
-    
+
     fn enter(&mut self) {
-        println!("Idle: enter");
+        println!("Running: enter");
     }
 
     fn execute(&mut self) {
-        println!("Idle: execute");
+        println!("Running: execute");
     }
 
     fn exit(&mut self) {
-        println!("Idle: exit");
+        println!("Running: exit");
     }
 }
