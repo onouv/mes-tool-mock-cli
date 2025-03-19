@@ -1,7 +1,7 @@
 @startuml
 [*] --> Stopped
-Stopped --> Idle: Signal::Start [inport_empty()]
-Stopped --> Running: Signal::Start [!inport_empty()]
+Stopped --> Idle: Signal::Start\n[inport_empty()]
+Stopped --> Running: Signal::Start\n[!inport_empty()]
 Idle --> Stopped: Signal::Stop
 Idle --> Running: Signal::LoadPart(part)\n[inport_free()\n&& process_empty()\n&& outport.free()]
 Idle --> Running: Signal::UnloadPart()\n[!inport_empty()\n&& process_empty()\n&& outport.free() ]
@@ -11,6 +11,7 @@ Running --> Running: Signal::LoadPart(part)
 Running --> Running: Signal::ProcessFinished\n[ ! inport_empty() ]
 Running --> Idle: Signal::ProcessFinished\n[ inport_empty() ] 
 Running --> Stopping: Stop
+Running --> Stopped: Signal::Abort
 Stopping --> Stopping: Signal::UnloadPart
 Stopping --> Stopping: Signal::LoadPart(part)
 Stopping --> Stopped: Signal::ProcessFinished

@@ -20,7 +20,7 @@ where
 {
     fn handle(self, ctx: &mut A::Context, tx: Option<OneshotSender<M::Result>>) {
         if let Some(tx) = tx {
-            tx.send(self);
+            let _ = tx.send(self);
         }
     }
 }
