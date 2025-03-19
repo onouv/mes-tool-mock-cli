@@ -1,0 +1,35 @@
+@startuml
+
+[*] --> Stopped
+Stopped --> Idle: (1) Start
+Stopped --> Running: (2) Start
+Idle --> Stopped: (3) Stop
+Idle --> Running: (4) LoadPart
+Idle --> Running: (5) UnloadPart
+Idle --> Idle: (6) LoadPart
+Running --> Running: (7) UnloadPart
+Running --> Running: (8) LoadPart
+Running --> Running: (9) ProcessFinished
+Running --> Idle: (10) ProcessFinished 
+Running --> Stopping: (11) Stop
+Running --> Stopped: (12) Abort
+Stopping --> Stopping: (13) UnloadPart
+Stopping --> Stopped: (14) ProcessFinished
+
+note as N1
+  (1):\tSignal::Start [inport_empty()]
+  (2):\tSignal::Start [!inport_empty() && outport_free()]
+  (3):\tSignal::Stop
+  (4):\tSignal::LoadPart(part) [inport_free() && process_empty() && outport.free()]
+  (5):\tSignal::UnloadPart() [!inport_empty() && process_empty() && outport.free() ]
+  (6):\tSignal::LoadPart(part) [inport_free() && (! process_empty() || ! outport.free())]
+  (7):\tSignal::UnoadPart
+  (8):\tSignal::LoadPart(part)
+  (9):\tSignal::ProcessFinished [ ! inport_empty() ]
+  (10):\tSignal::ProcessFinished [ inport_empty() ]
+  (11):\tSignal::Stop
+  (12):\tSignal::Abort
+  (13):\tSignal::UnloadPart
+  (14):\tSignal::ProcessFinished
+end note
+@enduml
