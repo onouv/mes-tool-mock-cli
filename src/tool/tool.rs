@@ -4,8 +4,8 @@ use std::collections::VecDeque;
 use std::fmt::{self, Display};
 use std::time::Duration;
 
+use super::Process;
 use super::ToolState;
-
 use super::Part;
 use super::signal::{Abort, LoadPart, ProcessFinished, Start, Stop, UnloadPart, UnloadPartResponse};
 use super::ToolSnapshot;
@@ -18,7 +18,7 @@ static PROCESS_TIME: Duration = Duration::from_secs(5);
 pub struct Tool {
     id: String,
     inport: VecDeque<Part>,
-    process: Option<Part>,
+    process: Process,
     process_task: Option<SpawnHandle>,
     outport: VecDeque<Part>,
     state: ToolState
@@ -50,18 +50,8 @@ impl Handler<Start> for Tool {
                 } else if self.outport_free() {
                     // (2)
                     self.shift_part_to_process();
-                    let cycle_time = PROCESS_TIME;
-                    let ctx_address = ctx.address();
-
-                    let future = Box::pin(async move {
-                        sleep(cycle_time).await;
-                        ctx_address.do_send(ProcessFinished);
-                        ()  // Explicitly return unit type
-                    });
-
-                    println!("Tool {}: process starting...", self.id);
-                    self.process_task = Some(ctx.spawn(future.into_actor(self)));   
-
+                    let process = &mut self.process;
+                    process.start(self, ctx);
                     self.state = ToolState::RUNNING;
                 }
             },
@@ -146,19 +136,7 @@ impl Handler<LoadPart> for Tool {
                 
                     if inport_free && process_empty && outport_free {
                         self.shift_part_to_process();
-                        
-                        let cycle_time = PROCESS_TIME;
-                    let ctx_address = ctx.address();
-
-                    let future = Box::pin(async move {
-                        sleep(cycle_time).await;
-                        ctx_address.do_send(ProcessFinished);
-                        ()  // Explicitly return unit type
-                    });
-
-                        self.process_task = Some(ctx.spawn(future.into_actor(self)));
-                        println!("Tool {}: process starting...", self.id);
-
+                        self.process_task = self.process.start(ctx);
                         self.state = ToolState::RUNNING;
                     }
 
@@ -192,18 +170,8 @@ impl Handler<UnloadPart> for Tool {
             ToolState::IDLE => {
                 // (5)
                 if self.outport_free() {
-                    let cycle_time = PROCESS_TIME;
-                    let ctx_address = ctx.address();
-
-                    let future = Box::pin(async move {
-                        sleep(cycle_time).await;
-                        ctx_address.do_send(ProcessFinished);
-                        ()  // Explicitly return unit type
-                    });
-
-                    self.process_task = Some(ctx.spawn(future.into_actor(self)));
-                    println!("Tool {} process starting...", self.id);
-                    
+                    self.shift_part_to_process();
+                    self.process_task = self.process.start(ctx);
                     self.state = ToolState::RUNNING;
                 }
             },
@@ -254,7 +222,7 @@ impl Tool {
         Tool {
             id: id.to_string(),
             inport: VecDeque::new(),
-            process: None,
+            process: Process::new(PROCESS_TIME),
             process_task: None,
             outport: VecDeque::new(),
             state: ToolState::STOPPED
@@ -271,10 +239,6 @@ impl Tool {
 
     fn outport_free(&self) -> bool {
         self.outport.len() < INPORT_CAPACITY
-    }
-
-    fn process_empty(&self) -> bool {
-        self.process.is_none()
     }
     
     fn shift_part_to_process(&mut self) {

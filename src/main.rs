@@ -1,112 +1,130 @@
 #![allow(warnings)]
 
 mod tool;
-use std::io::{stdout, Write};
+use std::{io::{stdout, Write}, process::{Command, Stdio}};
 use text_io::read;
 
 use tool::*;
 
 use actix::prelude::*;
 
+static prompt: &str = ". ";
+enum UserCommand {
+    start,
+    stop,
+    abort,
+    load,
+    unload,
+    exit,
+    nothing
+}
+
 #[actix::main]
 async fn main() {
-    
-    // use std::io::{stdin,stdout,Write};
-    // let mut s=String::new();
-    // print!("Please enter some text: ");
-    // let _=stdout().flush();
-    // stdin().read_line(&mut s).expect("Did not enter a correct string");
-    // if let Some('\n')=s.chars().next_back() {
-    //     s.pop();
-    // }
-    // if let Some('\r')=s.chars().next_back() {
-    //     s.pop();
-    // }
-    // println!("You typed: {}",s);
-    
-    
-
     let tool_1 = Tool::new("1").start();
-    // let tool_2 = Tool::new("2").start();
-    
-    
-    // let res = tool_1.send(tool::signal::Start).await.unwrap();
-    // println!("Tool 1: {:?}", res);
-
-    // let res = tool_1.send(LoadPart{ part: Part::new("1", "123")}).await.unwrap();
-    // println!("Tool 1: {:?}", res);
-
-    // let res = tool_1.send(Start).await.unwrap();
-    // println!("Tool 1: {:?}", res);
-
     let mut part_no = 0;
     loop {
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-        match retrieve_tool_command().as_str() {
-            "start" => {
+        match retrieve_tool_command() {
+            UserCommand::start => {
                 let res = tool_1.send(Start).await.unwrap();
-                println!("Tool 1: {:?}", res);
+                println!("{}Tool 1: {:?}", prompt, res);
             },
-            "stop" => {
+            UserCommand::stop => {
                 let res = tool_1.send(Stop).await.unwrap();
-                println!("Tool 1: {:?}", res);
+                println!("{}Tool 1: {:?}", prompt, res);
             },
-            "load" => {
+            UserCommand::load => {
                 let part_no = part_no + 1;
                 let part = Part::new(&part_no.to_string(), "123");
                 let res = tool_1.send(LoadPart{ part }).await.unwrap();
-                println!("Tool 1: {:?}", res);
+                println!("{}Tool 1: {:?}", prompt, res);
             },
-            "unload" => {
+            UserCommand::unload => {
                 let res = tool_1.send(UnloadPart).await.unwrap();
-                println!("Tool 1: {:?}", res);
+                println!("{}Tool 1: {:?}", prompt, res);
             },
-            "abort" => {
+            UserCommand::abort => {
                 let res = tool_1.send(Abort).await.unwrap();
-                println!("Tool 1: {:?}", res);
+                println!("{}Tool 1: {:?}", prompt, res);
             },
-            "exit" => {
+            UserCommand::exit => {
                 break;
             },
             _ => {
                 println!("Invalid command.");
             }
         }
+        std::io::flush()
+        
     }
    
 }
 
-fn retrieve_tool_command() -> String {
-    let mut input = String::new();
+fn retrieve_tool_command() -> UserCommand {
     
-    loop {
-        let input: String = read!("{}\n");
-        return match input.trim() {
-                    "start" => {
-                        "start".to_string()
-                    },
-                    "stop" => {
-                        "stop".to_string()
-                    },
-                    "load" => {
-                        "load".to_string()
-                    },
-                    "unload" => {
-                        "unload".to_string()
-                    },
-                    "abort" => {
-                        "abort".to_string()
-                    },
-                    "exit" => {
-                        "exit".to_string()
-                    },
-                    "q" => {
-                        "exit".to_string()
-                    },
-                    _ => {
-                        println!("Invalid command.");
-                        continue;
-                    }
-                }
+    let input: String = read!("{}\n");
+    return match input.as_str() {
+        "start" => {
+            UserCommand::start
+        },
+        "stop" => {
+            UserCommand::stop
+        },
+        "load" => {
+            UserCommand::load
+        },
+        "unload" => {
+            UserCommand::unload
+        },
+        "abort" => {
+            UserCommand::abort
+        },
+        "exit" => {
+            UserCommand::exit
+        },
+        "q" => {
+            UserCommand::exit
+        },
+        _ => {
+            UserCommand::nothing
         }
     }
+}
+
+fn clean_input(input: String) -> String {
+    let first_of_prompt: usize = 0;
+    let last_of_prompt: usize = prompt.chars().count();
+    substring(input, first_of_prompt, last_of_prompt)
+}
+
+fn substring(s: String, start: usize, len: usize) -> String {
+    let mut char_pos = 0;
+    let mut byte_start = 0;
+    let mut it = s.chars();
+
+    // find start position
+    loop {
+        if char_pos == start { break; }
+        if let Some(c) = it.next() {
+            char_pos += 1;
+            byte_start += c.len_utf8();
+        }
+        else { break; }
+    }
+
+    // find end position
+    char_pos = 0;
+    let mut byte_end = byte_start;
+    loop {
+        if char_pos == len { break; }
+        if let Some(c) = it.next() {
+            char_pos += 1;
+            byte_end += c.len_utf8();
+        }
+        else { break; }
+    }
+    
+    // return owned String
+    s[byte_start..byte_end].to_string()
+}

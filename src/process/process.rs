@@ -8,14 +8,16 @@ use super::{Part, Tool};
 
 #[derive(Debug)]
 pub struct Process {
+    name: String,
     part: Option<Part>,
-    task: Option<JoinHandle<()>>,
+    task: Option<SpawnHandle>,
     cycle_time: Duration
 }
 
 impl Process {
-    pub fn new(cycle_time: Duration) -> Self {
+    pub fn new(name: &str, cycle_time: Duration) -> Self {
         Self {
+            name: name.to_string(),
             part: None,
             task: None,
             cycle_time
@@ -34,20 +36,24 @@ impl Process {
         self.part.is_none()
     }
 
-    pub async fn start(&mut self, ctx: &mut Context<Tool>) {
+    pub fn start(&mut self, actor: &Tool, ctx: &mut Context<Tool>) {
         let cycle_time = self.cycle_time;
         let ctx_address = ctx.address();
 
-        let part = self.part.as_mut().unwrap();
-        part.add_step("process");
-        part.failed = false;
+        if let Some(part) = self.part.as_mut() {
+            part.add_step(&self.name);
+            part.failed = false;
 
-        println!("process starting for part {}", part.serial_no);
+            println!("process starting for part {}", part.serial_no);
 
-        self.task = Some(tokio::spawn(async move {
-            sleep(cycle_time).await;
-            ctx_address.do_send(ProcessFinished);
-        }));
+            let future = Box::pin(async move {
+                sleep(cycle_time).await;
+                ctx_address.do_send(ProcessFinished);
+            });
+
+            let handle = ctx.spawn(future.into_actor(actor));
+            self.task = Some(handle);
+        } 
     }
 
     pub async fn abort(&mut self) {
