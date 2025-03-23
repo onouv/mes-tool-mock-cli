@@ -2,12 +2,14 @@ use actix::prelude::*;
 use actix::clock::sleep;
 use std::collections::VecDeque;
 use std::fmt::{self, Display};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use super::Process;
+use crate::tool::{process, StartOperation, StockOperation};
+
+use super::process::Process;
 use super::ToolState;
 use super::Part;
-use super::signal::{Abort, LoadPart, ProcessFinished, Start, Stop, UnloadPart, UnloadPartResponse};
+use super::tool_commands::*;
 use super::ToolSnapshot;
 
 static INPORT_CAPACITY: usize = 3;
@@ -19,7 +21,6 @@ pub struct Tool {
     id: String,
     inport: VecDeque<Part>,
     process: Process,
-    process_task: Option<SpawnHandle>,
     outport: VecDeque<Part>,
     state: ToolState
 }
@@ -28,6 +29,7 @@ impl Actor for Tool {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
+        self.process = self.process.activate(ctx.address().recipient(), PROCESS_TIME);
         println!("Tool {} created.", self.id);
     }
 
@@ -45,14 +47,21 @@ impl Handler<Start> for Tool {
         match self.state {
             ToolState::STOPPED => {
                 if self.inport_empty() {
-                    // (1)
+                    // TX (1)
                     self.state = ToolState::IDLE;
                 } else if self.outport_free() {
-                    // (2)
-                    self.shift_part_to_process();
-                    let process = &mut self.process;
-                    process.start(self, ctx);
-                    self.state = ToolState::RUNNING;
+                    
+                    let part = self.inport.pop_back();
+                    
+                    match part {
+                        Some(part) => {
+                            self.process.load(part);
+                        },
+                        None => {
+                            println!("Tool {} ERROR: Software error - inport did not actually contain any part when it was indicated it does.", self.id);
+                            self.state = ToolState::FAULTED;
+                        }
+                    }                    
                 }
             },
             _ => ()
@@ -222,8 +231,7 @@ impl Tool {
         Tool {
             id: id.to_string(),
             inport: VecDeque::new(),
-            process: Process::new(PROCESS_TIME),
-            process_task: None,
+            process: Process::new(id.push_str("-").push_str(id)),
             outport: VecDeque::new(),
             state: ToolState::STOPPED
         }
@@ -240,16 +248,7 @@ impl Tool {
     fn outport_free(&self) -> bool {
         self.outport.len() < INPORT_CAPACITY
     }
-    
-    fn shift_part_to_process(&mut self) {
-        if let Some(mut part) = self.inport.pop_back() {
-            println!("Tool {}: moving part {} from inport to process.", self.id, part.serial_no);
-            
-            part.add_step("process");
-            part.failed = false;
-            self.process = Some(part);
-        }
-    }
+
     
     fn shift_part_to_outport(&mut self, part_has_error: bool) {
         if let Some(mut part) = self.process.take() {  
@@ -278,3 +277,5 @@ impl Display for Tool {
         write!(f, "Tool {} in state {}", self.id, self.state)
     }
 }
+
+

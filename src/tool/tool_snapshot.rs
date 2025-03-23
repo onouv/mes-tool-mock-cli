@@ -2,13 +2,13 @@ use actix::prelude::*;
 use actix::dev::{MessageResponse, OneshotSender};
 
 use super::state::ToolState;
+use super::process::ProcessSnapshot;
 
 #[derive(Debug)]
 pub struct ToolSnapshot {
     pub id: String,
     pub parts_inport: usize,
-    pub process_occupied: bool,
-    pub process_completion: Option<f32>,
+    pub process: ProcessSnapshot,
     pub parts_outport: usize,
     pub state: ToolState
 }

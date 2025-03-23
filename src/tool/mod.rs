@@ -11,8 +11,14 @@ mod tests;
 pub mod part;
 pub use part::Part;
 
-pub mod signal;
-pub use signal::*;
+pub mod tool_commands;
+pub use tool_commands::*;
+
+mod process;
+use process::*;
+
+pub mod material_port;
+pub use material_port::*;
 
 pub mod state;
 pub use state::ToolState;
@@ -20,5 +26,3 @@ pub use state::ToolState;
 mod tool_snapshot;
 use tool_snapshot::ToolSnapshot;
 
-mod process;
-use process::Process;

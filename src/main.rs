@@ -1,12 +1,16 @@
 #![allow(warnings)]
-
-mod tool;
 use std::{io::{stdout, Write}, process::{Command, Stdio}};
 use text_io::read;
+use actix::prelude::*;
 
+mod tool;
 use tool::*;
 
-use actix::prelude::*;
+mod signal;
+use signal::*;
+
+mod process;
+
 
 static prompt: &str = ". ";
 enum UserCommand {

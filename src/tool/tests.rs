@@ -7,9 +7,10 @@ mod transitions {
     use crate::tool::{LoadPart, Part, Start, Stop, Tool, ToolState};
     
     #[actix::test]
-    #[ignore]
-    async fn loading_stopped_does_nothing() {
-        assert_eq!(1, 0);
+    async fn stopped_is_default() {
+        let tool = Tool::new("1").start();
+        
+
     }
 
     #[actix::test]
