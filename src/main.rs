@@ -31,25 +31,25 @@ async fn main() {
         tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
         match retrieve_tool_command() {
             UserCommand::start => {
-                let res = tool_1.send(Start).await.unwrap();
+                let res = tool_1.send(StartCmd).await.unwrap();
                 println!("{}Tool 1: {:?}", prompt, res);
             },
             UserCommand::stop => {
-                let res = tool_1.send(Stop).await.unwrap();
+                let res = tool_1.send(StopCmd).await.unwrap();
                 println!("{}Tool 1: {:?}", prompt, res);
             },
             UserCommand::load => {
                 let part_no = part_no + 1;
                 let part = Part::new(&part_no.to_string(), "123");
-                let res = tool_1.send(LoadPart{ part }).await.unwrap();
+                let res = tool_1.send(LoadPartCmd{ part }).await.unwrap();
                 println!("{}Tool 1: {:?}", prompt, res);
             },
             UserCommand::unload => {
-                let res = tool_1.send(UnloadPart).await.unwrap();
+                let res = tool_1.send(UnloadPartCmd).await.unwrap();
                 println!("{}Tool 1: {:?}", prompt, res);
             },
             UserCommand::abort => {
-                let res = tool_1.send(Abort).await.unwrap();
+                let res = tool_1.send(AbortCmd).await.unwrap();
                 println!("{}Tool 1: {:?}", prompt, res);
             },
             UserCommand::exit => {

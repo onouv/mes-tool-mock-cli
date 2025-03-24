@@ -5,20 +5,20 @@ use super::{ToolSnapshot, Part};
 
 #[derive(Message)]
 #[rtype(result = "ToolSnapshot")]
-pub struct Start;
+pub struct StartCmd;
 
 #[derive(Message)]
 #[rtype(result = "ToolSnapshot")]
-pub struct Stop;
+pub struct StopCmd;
 
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct ProcessFinished;
+pub struct ProcessFinishedSgn;
 
 #[derive(Message, Debug)]
 #[rtype(result = "ToolSnapshot")]
-pub struct LoadPart {
+pub struct LoadPartCmd {
     pub part: Part
 }
 
@@ -30,8 +30,8 @@ pub struct UnloadPartResponse {
 
 #[derive(Message)]
 #[rtype(result = "UnloadPartResponse")]
-pub struct UnloadPart;
+pub struct UnloadPartCmd;
 
 #[derive(Message)]
 #[rtype(result = "ToolSnapshot")]
-pub struct Abort;
+pub struct AbortCmd;

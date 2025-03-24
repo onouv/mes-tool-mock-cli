@@ -4,12 +4,13 @@ use std::collections::VecDeque;
 use std::fmt::{self, Display};
 use std::time::{Duration, Instant};
 
-use crate::tool::{process, StartOperation, StockOperation};
-
-use super::process::Process;
+use super::inport::Inport;
+use super::outport::Outport;
+use super::StartOperationCmd;
+use super::Process;
 use super::ToolState;
 use super::Part;
-use super::tool_commands::*;
+use super::messages::*;
 use super::ToolSnapshot;
 
 static INPORT_CAPACITY: usize = 3;
@@ -19,9 +20,9 @@ static PROCESS_TIME: Duration = Duration::from_secs(5);
 #[derive(Debug)]
 pub struct Tool {
     id: String,
-    inport: VecDeque<Part>,
+    inport: Inport,
     process: Process,
-    outport: VecDeque<Part>,
+    outport: Outport,
     state: ToolState
 }
 
@@ -38,11 +39,13 @@ impl Actor for Tool {
     }
 }
 
-impl Handler<Start> for Tool {
+impl Handler<StartCmd> for Tool {
     type Result = ToolSnapshot;
-    fn handle(&mut self, _msg: Start, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: StartCmd, ctx: &mut Context<Self>) -> Self::Result {
         
         println!("Tool {}: handling Start signal...", self.id);
+
+
 
         match self.state {
             ToolState::STOPPED => {
@@ -71,10 +74,10 @@ impl Handler<Start> for Tool {
     }
 }
 
-impl Handler<Stop> for Tool {
+impl Handler<StopCmd> for Tool {
     type Result = ToolSnapshot;
 
-    fn handle(&mut self, _msg: Stop, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: StopCmd, _ctx: &mut Context<Self>) -> Self::Result {
 
         println!("Tool {}: handling Stop signal...", self.id);
         
@@ -95,10 +98,10 @@ impl Handler<Stop> for Tool {
     }
 }
 
-impl Handler<ProcessFinished> for Tool {
+impl Handler<ProcessFinishedSgn> for Tool {
     type Result = ();
 
-    fn handle(&mut self, _msg: ProcessFinished, _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: ProcessFinishedSgn, _ctx: &mut Context<Self>) -> Self::Result {
 
         println!("Tool {}: handling ProcessFinished signal...", self.id);
 
@@ -127,10 +130,10 @@ impl Handler<ProcessFinished> for Tool {
 
 }
 
-impl Handler<LoadPart> for Tool {
+impl Handler<LoadPartCmd> for Tool {
     type Result = ToolSnapshot;
 
-    fn handle(&mut self, msg: LoadPart, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: LoadPartCmd, ctx: &mut Context<Self>) -> Self::Result {
 
         println!("Tool {}: handling LoadPart {:?} signal...", self.id, msg);
 
@@ -166,10 +169,10 @@ impl Handler<LoadPart> for Tool {
     }
 }
 
-impl Handler<UnloadPart> for Tool {
-    type Result =  MessageResult<UnloadPart>;
+impl Handler<UnloadPartCmd> for Tool {
+    type Result =  MessageResult<UnloadPartCmd>;
 
-    fn handle(&mut self, _msg: UnloadPart, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: UnloadPartCmd, ctx: &mut Context<Self>) -> Self::Result {
     
         println!("Tool {} received UnloadPart signal.", self.id);
 
@@ -205,10 +208,10 @@ impl Handler<UnloadPart> for Tool {
     }
 }
 
-impl Handler<Abort> for Tool {
+impl Handler<AbortCmd> for Tool {
     type Result = ToolSnapshot;
 
-    fn handle(&mut self, _msg: Abort, ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, _msg: AbortCmd, ctx: &mut Context<Self>) -> Self::Result {
         match self.state {
             ToolState::RUNNING => {
                 // (12)

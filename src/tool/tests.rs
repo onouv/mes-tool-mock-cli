@@ -4,7 +4,7 @@
 mod transitions {
     use actix::{Actor, Addr};
 
-    use crate::tool::{LoadPart, Part, Start, Stop, Tool, ToolState};
+    use crate::tool::{LoadPartCmd, Part, StartCmd, StopCmd, Tool, ToolState};
     
     #[actix::test]
     async fn stopped_is_default() {
@@ -22,14 +22,14 @@ mod transitions {
     #[actix::test]
     async fn start_stopped_moves_to_idle() {
         let tool: Addr<Tool> = setup(ToolState::STOPPED).await;
-        let snapshot = tool.send(Start).await.unwrap();
+        let snapshot = tool.send(StartCmd).await.unwrap();
         assert_eq!(snapshot.state, ToolState::IDLE);
     }
 
     #[actix::test]
     async fn loading_idle_moves_to_running() {
         let tool: Addr<Tool> = setup(ToolState::IDLE).await;
-        let snapshot = tool.send(LoadPart{ part: Part::new("1", "123")}).await.unwrap();
+        let snapshot = tool.send(LoadPartCmd{ part: Part::new("1", "123")}).await.unwrap();
         assert_eq!(snapshot.state, ToolState::RUNNING);
         assert_eq!(snapshot.parts_inport, 0);
         assert_eq!(snapshot.parts_outport, 0);
@@ -47,7 +47,7 @@ mod transitions {
     #[ignore]
     async fn stop_idle_moves_to_stopped() {
         let tool: Addr<Tool> = setup(ToolState::IDLE).await;
-        let snapshot = tool.send(Stop).await.unwrap();
+        let snapshot = tool.send(StopCmd).await.unwrap();
         assert_eq!(snapshot.state, ToolState::STOPPED);
     }
 
@@ -57,11 +57,11 @@ mod transitions {
         match target_state {
             
             ToolState::IDLE => {
-                tool.send(Start).await.unwrap();
+                tool.send(StartCmd).await.unwrap();
             },
             ToolState::RUNNING => {
-                tool.send(Start).await.unwrap();
-                tool.send(LoadPart{ 
+                tool.send(StartCmd).await.unwrap();
+                tool.send(LoadPartCmd{ 
                     part: Part::new("1", "123")
                 }).await.unwrap();
             },

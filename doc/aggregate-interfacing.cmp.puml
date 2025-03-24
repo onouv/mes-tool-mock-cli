@@ -1,0 +1,33 @@
+@startuml
+
+component Tool <<root-actor>>
+component Inport <<actor>>
+component Process <<actor>>
+component Outport <<actor>>
+
+interface "PushDownstream" as I1 
+interface "PushDownstream" as P1
+interface "PushDownstream" as O1
+interface "Load(Part)" as I0
+interface "StartOperation" as P0
+interface "Unload() -> Part" as O0
+
+Inport --() I1
+Inport -up-() I0
+ 
+Process -left-() P1
+Process-up-() P0
+
+
+Outport -left-() O1
+Outport -up-() O0
+
+Process -right-> O1
+Inport -right-> P1
+
+Tool --> I0 
+Tool -down-> I1
+Tool -down-> P0
+Tool -down-> O0
+
+@enduml

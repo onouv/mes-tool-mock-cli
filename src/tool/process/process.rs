@@ -6,13 +6,21 @@ use std::time::Duration;
 use std::time::Instant;
 use actix::prelude::*;
 use actix::clock::sleep;
-//use tokio::task::JoinHandle;
 use tokio::time;
+
+use crate::tool::material_flow::BufferInfo;
+use crate::tool::material_flow::BufferStatus;
+use crate::tool::material_flow::MaterialFlowAction;
+use crate::tool::material_flow::MaterialFlowError;
+use crate::tool::material_flow::MaterialFlowResult;
+use crate::tool::material_flow::MaterialFlowStatus;
+use crate::tool::material_flow::PushDownNextCmd;
 
 use super::ProcessResult;
 use super::ProcessError;
-use super::super::commands::{StartOperation, StockOperation };
-use super::super::{Part, Tool, ProcessFinished};
+use super::Reason;
+use super::{StartOperationCmd, AbortOperationCmd };
+use super::super::{Part, ProcessFinishedSgn};
 
 #[derive(Debug, Clone)]
 pub struct ProcessSnapshot {
@@ -21,160 +29,161 @@ pub struct ProcessSnapshot {
     pub part_id: Option<String>,
 }
 
-pub struct Process {
-    id: String,
-    snapshot: ProcessSnapshot,
-    actor: Option<Addr<ProcessActor>>
-}
-
-impl Process {
-    pub fn new(id: &str, cycle_time: Duration) -> Self {
-        Self { 
-            id: id.to_string(),
-            snapshot: ProcessSnapshot { 
-                time_stamp: Instant::now(), 
-                is_running: false, 
-                part_id: None 
-            },
-            actor: None
-        }
-    }
-
-    pub fn activate(&mut self, parent: Recipient<ProcessFinished>, cycle_time: Duration) {
-        self.actor = Some(ProcessActor::new(self.id.clone(), cycle_time, parent).start());
-    }
-
-    pub fn load(&mut self, part: Part) -> ProcessResult {
-        match self.actor {
-            Some(actor) => {
-                match actor.try_send(StockOperation { part }) {
-                    Ok(()) => {
-                        self.snapshot.time_stamp = Instant::now();
-                        self.snapshot.part_id = Some(part.serial_no);
-                        ProcessResult::Ok
-                    },
-                    Ok(ProcessResult::Error(error)) => {
-
-                    }
-                    Err(error) => {
-                        println!("Tool {} ERROR: Software error - failed to stock operation of process ({:?})", self.id, error);
-                        ProcessResult::Error(())
-                    }
-                }
-            },
-            None => {
-
-            }
-            
-            
-        }
-    }
-
-    pub fn start(& self) {
-    
-        match self.actor.unwrap() {
-            Some(actor) => {
-                match actor.try_send(StartOperation) {
-                    Ok(()) => {
-                        self.snapshot
-                        self.state = ToolState::RUNNING;
-                    },
-                    Err(error) => {
-                        println!("Tool {}: ERROR - failed to start process ({:?})", self.id, error);
-                        self.state = ToolState::FAULTED
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn abort() {
-        
-    }
-
-    pub fn snapshot(&mut self) -> ProcessSnapshot {
-        self.snapshot.time_stamp = std::time::Instant::now();
-        self.snapshot.clone()
-    }
-}
-
 #[derive(Debug)]
-struct ProcessActor {
+pub struct Process {
     id: String,
     part: Option<Part>,
     cycle_time: Duration,
     operation: Option<SpawnHandle>,
-    parent: Recipient<ProcessFinished>
+    parent: Recipient<ProcessFinishedSgn>,
+    downstream_blocked: bool,
+    is_busy: bool
 }
 
 
 
-impl Actor for ProcessActor {
+impl Actor for Process {
     type Context = Context<Self>;
 }   
 
-impl Handler<StockOperation> for ProcessActor {
+// impl Handler<StockOperation> for Process {
+//     type Result = ProcessResult;
+
+//     fn handle(&mut self, msg: StockOperation, ctx: &mut Self::Context) -> Self::Result {
+//         if self.part.is_some() {
+//             return ProcessResult::Error(ProcessError::Occupied);
+//         }
+
+//         self.part = Some(msg.part);
+
+//         ProcessResult::Ok
+//     }
+// }
+
+impl Handler<StartOperationCmd> for Process {
     type Result = ProcessResult;
 
-    fn handle(&mut self, msg: StockOperation, ctx: &mut Self::Context) -> Self::Result {
-        if self.part.is_some() {
-            return ProcessResult::Error(ProcessError::Occupied);
+    fn handle(&mut self, _msg: StartOperationCmd, ctx: &mut Self::Context) -> Self::Result {
+        
+        if self.downstream_blocked {
+            return ProcessResult(Err(ProcessError::DownstreamBlocked));
         }
 
-        self.part = Some(msg.part);
+        if self.is_busy {
+            return ProcessResult(Err(ProcessError::Busy));
+        }
+        
+        match &self.part {
+            Some(part) => {
+                let (part, result) = self.decide_outcome(part.clone());
+                
+                println!("process starting for part {}", part.serial_no);
 
-        ProcessResult::Ok
+                let cycle_time = self.cycle_time;
+                let parent = self.parent.clone();
+                let future = Box::pin(async move {
+                    sleep(cycle_time).await;
+
+                    match parent.try_send(ProcessFinishedSgn) {
+                        Err(error) => {
+                            // queue signal anyway in case parent recovers
+                            parent.do_send(ProcessFinishedSgn);    
+                            println!("Process: ERROR - cannot indicate process finished. Likely software error.");
+                        },
+                        _ => ()
+                    }
+                });
+
+                let handle = ctx.spawn(future.into_actor(self));
+                self.operation = Some(handle);
+
+                return ProcessResult(Ok(()));
+            },
+            None => {
+                return ProcessResult(
+                    Err(ProcessError::MaterialMissing)
+                )
+            }        
+        }
     }
 }
 
-impl Handler<StartOperation> for ProcessActor {
-    type Result = ProcessResult;
 
-    fn handle(&mut self, _msg: StartOperation, ctx: &mut Self::Context) -> Self::Result {
-        if self.part.is_none() {
-            return ProcessResult::Error(ProcessError::Empty);
+impl Handler<PushDownNextCmd> for Process {
+    type Result = MaterialFlowResult;
+
+    ///
+    /// Take the part out of the operation and load it to downstream recipient
+    /// 
+    /// Return error MaterialFlowError::Busy when either is ongoing:
+    /// - operation  
+    /// - message handling with downstream recipient
+    /// 
+    fn handle(&mut self, msg: PushDownNextCmd, _ctx: &mut Self::Context) -> Self::Result {
+
+        if self.is_busy {
+            return MaterialFlowResult(Err(MaterialFlowError::Busy));
         }
 
-        if let Some(part) = self.part.as_mut() {
-            part.add_step(&self.id);
-            part.failed = false;
 
-            println!("process starting for part {}", part.serial_no);
 
-            let cycle_time = self.cycle_time;
-            let parent = self.parent.clone();
-            let future = Box::pin(async move {
-                sleep(cycle_time).await;
-
-                match parent.try_send(ProcessFinished) {
-                    Err(error) => {
-                        // queue signal anyway in case parent recovers
-                        parent.do_send(ProcessFinished);
-                        println!("Process: ERROR - cannot indicate process finished. Likely software error.");
-                    },
-                    _ => ()
-                }
-            });
-
-            let handle = ctx.spawn(future.into_actor(self));
-            self.operation = Some(handle);
-
-            return ProcessResult::Ok;
-        } 
-
-        ProcessResult::Error(ProcessError::Empty)
+        match self.push(msg.part) {
+            Ok(()) => {
+                self.is_busy = true;
+                return MaterialFlowResult(Ok(MaterialFlowStatus {
+                    buffer: self.buffer_status(),
+                    action: MaterialFlowAction::PushedDownstream
+                }));
+            },
+            Err(error) => {
+                return MaterialFlowResult(Err(error))
+            }
+        }
     }
 }
 
-impl ProcessActor {
-    pub fn new(id: String, cycle_time: Duration, parent: Recipient<ProcessFinished>) -> Self {
+
+
+impl Handler<MaterialFlowResult> for Process {
+    type Result = ();
+
+    fn handle(&mut self, msg: MaterialFlowResult, _ctx: Self::Context) -> Self::Result {
+        
+    }
+}
+
+struct Outcome<'a> { 
+    pub part: &'a Part,
+    pub result: ProcessResult
+}
+
+impl Process {
+    pub fn new(id: String, cycle_time: Duration, parent: Recipient<ProcessFinishedSgn>) -> Self {
         Self {
             id,
             part: None,
             operation: None,
             cycle_time,
+            is_busy: false,
+            downstream_blocked: false,
             parent
         }
     }
 
+    fn decide_outcome(&self, mut part: Part) -> (Part, ProcessResult) {
+        // TODO: future statistical magic with recipies and part history
+        part.add_step(&self.id);
+        part.failed = false;
+        
+        (part, ProcessResult(Ok(())))
+    }
+}
+
+impl BufferInfo for Process {
+    fn buffer_status(&self) -> BufferStatus {
+        BufferStatus { 
+            is_full: self.part.is_some(),
+            is_empty: self.part.is_none()
+        }
+    }
 }

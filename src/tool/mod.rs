@@ -11,14 +11,20 @@ mod tests;
 pub mod part;
 pub use part::Part;
 
-pub mod tool_commands;
-pub use tool_commands::*;
+pub mod messages;
+pub use messages::*;
 
 mod process;
 use process::*;
 
-pub mod material_port;
-pub use material_port::*;
+mod material_flow;
+use material_flow::*;
+
+mod inport;
+use inport::*;
+
+mod outport;
+use outport::*;
 
 pub mod state;
 pub use state::ToolState;
