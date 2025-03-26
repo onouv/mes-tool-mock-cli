@@ -30,7 +30,7 @@ impl Actor for Outport {
 }
 
 impl Outport {
-    pub fn new(id: String, downstream: Recipient<LoadCmd>) -> Self {
+    pub fn new(id: String) -> Self {
         Self {
             id,
             buffer: VecDeque::default(),
@@ -55,17 +55,24 @@ impl Outport {
     }
 }
 
-impl Handler<LoadCmd> for Outport {
+impl Handler<PushDownstreamCmd> for Outport {
     type Result = MaterialFlowResult;
 
-    fn handle(&mut self, msg: LoadCmd, _ctx: &mut Self::Context) -> Self::Result {
-    
-        
+    /// 
+    /// Accept incoming part form upstream
+    /// 
+    /// Return Ok(PushedDownstream) part accepted and able to accept further parts
+    /// 
+    /// Return Ok(Full) if part accepted but unable to accept further parts
+    /// 
+    /// Return Err(...) accordingly
+    /// 
+    fn handle(&mut self, msg: PushDownstreamCmd, _ctx: &mut Self::Context) -> Self::Result {
         match self.push(msg.part) {
             Ok(()) => {
                 return MaterialFlowResult(Ok(MaterialFlowStatus {
                     buffer: self.buffer_status(),
-                    action: MaterialFlowAction::Loaded
+                    action: MaterialFlowAction::PushedDownstream
                 }));
             },
             Err(error) => {

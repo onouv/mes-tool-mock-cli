@@ -15,6 +15,8 @@ pub struct StartOperationCmd;
 #[rtype(result = "ProcessResult")]
 pub struct AbortOperationCmd;
 
+#[derive(Message)]
+#[rtype(result = "()")]
 pub struct ProcessResult(pub Result<(), ProcessError>);
 
 impl<A, M> MessageResponse<A, M> for ProcessResult

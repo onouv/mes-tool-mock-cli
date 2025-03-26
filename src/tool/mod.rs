@@ -31,4 +31,3 @@ pub use state::ToolState;
 
 mod tool_snapshot;
 use tool_snapshot::ToolSnapshot;
-

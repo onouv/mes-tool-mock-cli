@@ -17,7 +17,8 @@ static INPORT_BUFFER_SIZE: usize = 10;
 pub struct Inport {
     id: String,
     buffer: VecDeque<Part>,
-    downstream: Recipient<LoadCmd>,
+    downstream: Option<Recipient<PushDownstreamCmd>>,
+    upstream: Option<Recipient<MaterialFlowResult>>,
     is_handling: bool
 }
 
@@ -27,11 +28,13 @@ impl Actor for Inport {
 }
 
 impl Inport {
-    pub fn new(id: String, downstream: Recipient<LoadCmd>) -> Self {
+    pub fn new(id: String) -> Self {
+
         Self {
             id,
             buffer: VecDeque::default(),
-            downstream,
+            downstream: None,
+            upstream: None,
             is_handling: false
         }
     }
@@ -99,10 +102,10 @@ impl Handler<UnloadCmd> for Inport {
     }
 }
 
-impl Handler<PushDownNextCmd> for Inport {
+impl Handler<PushDownstreamCmd> for Inport {
     type Result = MaterialFlowResult;
 
-    fn handle(&mut self, msg: PushDownNextCmd, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: PushDownstreamCmd, ctx: &mut Self::Context) -> Self::Result {
         if self.is_handling {
             return MaterialFlowResult(Err(MaterialFlowError::Busy));
         }
@@ -110,7 +113,7 @@ impl Handler<PushDownNextCmd> for Inport {
 
         match self.pop() {
             Ok(part) => {
-                match self.downstream.try_send(LoadCmd { part: part.clone() }) {
+                match self.downstream.try_send(PushDownstreamCmd { part: part.clone() }) {
                     Ok(()) => {                        
                         self.is_handling = false;
 
@@ -140,11 +143,25 @@ impl Handler<PushDownNextCmd> for Inport {
     }
 }
 
+impl Handler<MaterialFlowResult> for Inport {
+    type Result = ();
+
+    fn handle(&mut self, msg: MaterialFlowResult, ctx: &mut Self::Context) -> Self::Result {
+        
+    }
+}
+
 impl BufferInfo for Inport {
     fn buffer_status(&self) -> BufferStatus {
         BufferStatus { 
             is_full: self.buffer.len() >= INPORT_BUFFER_SIZE,
             is_empty: self.buffer.is_empty()
         }
+    }
+}
+
+impl MaterialFlowSourceActor for Inport {
+    fn setHandlers(&mut self, upstream: Recipient<MaterialFlowResult>, downstream: Recipient<LoadCmd>) {
+        
     }
 }

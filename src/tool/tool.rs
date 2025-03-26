@@ -1,11 +1,13 @@
 use actix::prelude::*;
 use actix::clock::sleep;
 use std::collections::VecDeque;
-use std::fmt::{self, Display};
+use std::fmt::{self, format, Display};
 use std::time::{Duration, Instant};
 
 use super::inport::Inport;
+use super::material_flow::{MaterialFlowChainHandlers, MaterialFlowChainedActor, MaterialFlowResult, MaterialFlowSourceActor, PushDownstreamCmd};
 use super::outport::Outport;
+use super::process::ProcessResult;
 use super::StartOperationCmd;
 use super::Process;
 use super::ToolState;
@@ -15,28 +17,19 @@ use super::ToolSnapshot;
 
 static INPORT_CAPACITY: usize = 3;
 static OUTPORT_CAPACITY: usize = 3;
-static PROCESS_TIME: Duration = Duration::from_secs(5);
+static PROCESS_OPERATION_TIME: Duration = Duration::from_secs(5);
 
 #[derive(Debug)]
 pub struct Tool {
     id: String,
-    inport: Inport,
-    process: Process,
+    inport: Option<Inport>,
+    process: Option<Process>,
     outport: Outport,
     state: ToolState
 }
 
 impl Actor for Tool {
     type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        self.process = self.process.activate(ctx.address().recipient(), PROCESS_TIME);
-        println!("Tool {} created.", self.id);
-    }
-
-    fn stopped(&mut self, ctx: &mut Context<Self>) {
-        println!("Tool {} destroyed.", self.id);
-    }
 }
 
 impl Handler<StartCmd> for Tool {
@@ -229,6 +222,20 @@ impl Handler<AbortCmd> for Tool {
     }
 }
 
+impl Handler<MaterialFlowResult> for Tool {
+    type Result = ();
+    fn handle(&mut self, msg: MaterialFlowResult, ctx: &mut Self::Context) -> Self::Result {
+        
+    }
+}
+
+impl Handler<ProcessResult> for Tool {
+    type Result = ();
+    fn handle(&mut self, msg: ProcessResult, ctx: &mut Self::Context) -> Self::Result {
+        
+    }
+}
+
 impl Tool {
     pub fn new(id: &str) -> Self {
         Tool {
@@ -238,29 +245,7 @@ impl Tool {
             outport: VecDeque::new(),
             state: ToolState::STOPPED
         }
-    }
-
-    fn inport_free(&self) -> bool {
-        self.inport.len() < INPORT_CAPACITY
-    }
-
-    fn inport_empty(&self) -> bool {
-        self.inport.is_empty()
-    }
-
-    fn outport_free(&self) -> bool {
-        self.outport.len() < INPORT_CAPACITY
-    }
-
-    
-    fn shift_part_to_outport(&mut self, part_has_error: bool) {
-        if let Some(mut part) = self.process.take() {  
-            println!("Tool {}: moving part {} from process to outport.", self.id, part.serial_no);
-
-            part.failed = part_has_error;      
-            self.outport.push_front(part);
-        }
-    }                       
+    }    
 
     fn snapshot(&self) -> ToolSnapshot {
         ToolSnapshot {
@@ -272,7 +257,6 @@ impl Tool {
             state: self.state.clone()
         }
     }
-
 }
 
 impl Display for Tool {
@@ -281,4 +265,28 @@ impl Display for Tool {
     }
 }
 
+pub fn create_tool(id: &str) -> Addr<Tool> {
+    let tool = Tool::new(id);
+    let tool_handle = tool.start();
 
+    let outport_id = format!("{}.03", id);
+    let outport_handle = Outport::new(outport_id).start();    
+
+    let inport_id = format!("{}.01", id);
+    let mut inport = Inport::new(inport_id);
+    let inport_handle = inport.start();
+    
+    let process_id = format!("{}.02", id);
+    let mut process = Process::new(process_id, PROCESS_OPERATION_TIME);
+    let process_handlers = MaterialFlowChainHandlers {
+        downstream: outport_handle.recipient::<PushDownstreamCmd>(),
+        upstream: inport_handle.recipient::<MaterialFlowResult>(),
+        parent: tool_handle.clone().recipient::<ProcessFinishedSgn>(),
+        parent_result_handler: tool_handle.clone().recipient::<ProcessResult>()
+    };
+    process.setHandlers(process_handlers);
+    let process_handle = process.start();
+
+    inport.setHandlers(tool_handle.recipient(), process_handle.recipient());
+    tool_handle.clone()
+}

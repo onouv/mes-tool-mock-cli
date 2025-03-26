@@ -1,10 +1,10 @@
 use actix::{
     dev::{MessageResponse, OneshotSender}, 
     prelude::Actor, 
-    Message
+    Message, Recipient
 };
 
-use super::Part;
+use super::{process::ProcessResult, Part, ProcessFinishedSgn};
 
 pub struct BufferStatus {
     pub is_full: bool,
@@ -28,6 +28,7 @@ pub struct MaterialFlowStatus {
 
 pub enum MaterialFlowError {
     Full,
+    BlockedByDownstream,
     Empty,
     Busy,
     EquipmentFailure
@@ -59,11 +60,37 @@ pub struct LoadCmd {
 
 #[derive(Message)]
 #[rtype(result = "MaterialFlowResult")]
+pub struct StartNextCycleCmd;
+
+#[derive(Message)]
+#[rtype(result = "MaterialFlowResult")]
 pub struct UnloadCmd;
 
-/// 
-/// Push next part in line to downstream recipient.
+/// Accept incoming part and push next part in line to downstream recipient.
+/// This operation is expected to continue in chain down the stream.
 /// 
 #[derive(Message)]
 #[rtype(result = "MaterialFlowResult")]
-pub struct PushDownNextCmd;
+pub struct PushDownstreamCmd { pub part: Part }
+
+pub trait MaterialFlowSourceActor {
+    fn setHandlers(&mut self, upstream: Recipient<MaterialFlowResult>, downstream: Recipient<PushDownstreamCmd>);
+}
+
+pub trait MaterialFlowChainedActor {
+    fn setHandlers(&mut self, handlers: MaterialFlowChainHandlers);
+}
+
+#[derive(Debug)]
+pub struct MaterialFlowChainHandlers {
+    pub downstream: Recipient<PushDownstreamCmd>,
+    pub upstream:  Recipient<MaterialFlowResult>,
+    pub parent: Recipient<ProcessFinishedSgn>,
+    pub parent_result_handler: Recipient<ProcessResult>
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct InitializeChainedActorCmd {
+   pub handlers: MaterialFlowChainHandlers
+}

@@ -6,24 +6,23 @@ participant "<<actor>>\nInport" as Inport
 participant "<<actor>>\nProcess" as Process
 participant "<<actor>>\nOutport" as Outport
 
+note across: SCENARIO:\n* A stopped tool is started,\n* 2 parts buffered in the inport are streamed down.\n* After the second part, outport has filled up and blocks the chain.\n* Tool goes to IDLE. 
 note over Tool: STOPPED
-note over Inport: [part5, part4];\ndownstream_blocked: false
+note over Inport: [part6, part5, part4];\ndownstream_blocked: false
 note over Process:  [part3]\nis_busy: false\ndownstream_blocked: false
 note over Outport: [part2, part1]\nis_full: false
 
 User -> Tool: StartCmd
 Tool -> Inport: StartNextCycleCmd()
-Inport -> Process: PushDownStream(part4)
+Inport -> Process: PushDownStreamCmd(part4)
 Process --> Process: part3 = self.swap(part4)
-Process -> Outport: PushDownStream(part3)
+Process -> Outport: PushDownStreamCmd(part3)
 Outport --> Outport
-note over Outport: [part3, part2, part1]\nis_full: false
-Process <- Outport: MaterialFlowResult(Ok(NOT_BLOCKED))
-Process --> Process: self.unblock()
+note over Outport: [part3, part2, part1]
+Process <- Outport: MaterialFlowResult(Ok(PushedDownstream))
 note over Process:  [part4]\nis_busy: false\ndownstream_blocked: false
-Inport <- Process: MaterialFlowResult(Ok(NOT_BLOCKED))
-Inport --> Inport: self.unblock()
-note over Inport: [part5];\ndownstream_blocked: false
+Inport <- Process: MaterialFlowResult(Ok(PushedDownstream))
+note over Inport: [part6, part5];\ndownstream_blocked: false
 Tool <- Inport: MaterialFlowResult(Ok())
 
 Tool -> Process: StartOperationCmd()
@@ -39,16 +38,19 @@ User <- Tool: ToolResult(Ok())
 {start} <-> {end}: PROCESS_CYCLE_TIME
 Future --> Future !!
 Tool -> Inport: StartNextCycleCmd()
-Inport -> Process: PushDownStream(part5)
+Inport -> Process: PushDownStreamCmd(part5)
 Process --> Process: part4 = self.swap(part5)
-Process -> Outport: PushDownStream(part4)
+Process -> Outport: PushDownStreamCmd(part4)
 Outport --> Outport
-note over Outport: [part4, part3, part2, part1]; is_full = true
-Process <- Outport: MaterialFlowResult(Ok(BLOCKED))
-Process --> Process: self.block()
+note over Outport: [part4, part3, part2, part1]\n(buffer is full)
+Process <- Outport: MaterialFlowResult(Ok(Full))
 note over Process: [part5]\ndownstream_blocked: true
-Inport <- Process: MaterialFlowResult(Ok(BLOCKED))
-Inport --> Inport: self.block()
-note over Inport: [-],\ndownstream_blocked: true
-Tool <- Inport MaterialFlowResult(Ok(EMPTY))
+Inport <- Process: MaterialFlowResult(Ok(BlockedByDownStream))
+note over Inport: [part6],\ndownstream_blocked: true
+Tool <- Inport: MaterialFlowResult(Ok())
+
+Tool -> Inport: StartNexCycleCmd()
+Tool <- Inport: MaterialFlowResult(Err(BlockedByDownStream))
+note over Tool: IDLE
+
 @enduml

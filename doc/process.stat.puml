@@ -1,0 +1,18 @@
+@startuml
+state Created
+state Ready
+state BusyDownstreamFlow
+state BusyOperation
+state BusyLoadport
+
+[*] --> Created
+Created --> Ready: InitializeChainedActorCmd(MaterialFlowChainHandlers)
+Ready --> BusyDownstreamFlow: PushDownstreamCmd(Part)
+BusyDownstreamFlow --> Ready: MaterialflowResult(OK)
+BusyDownstreamFlow --> BlockedDownstream: MaterialFlowResult() [downstream actor indicates blocked]
+Ready --> BusyOperation: StartOperationCmd()
+BusyOperation --> Ready: CycleTime elapsed
+BlockedDownstream --> BusyLoadport: UnloadCmd
+BusyLoadport --> Ready: done
+
+@enduml

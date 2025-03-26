@@ -6,12 +6,6 @@ use actix::prelude::*;
 mod tool;
 use tool::*;
 
-mod signal;
-use signal::*;
-
-mod process;
-
-
 static prompt: &str = ". ";
 enum UserCommand {
     start,
@@ -58,9 +52,7 @@ async fn main() {
             _ => {
                 println!("Invalid command.");
             }
-        }
-        std::io::flush()
-        
+        }        
     }
    
 }
@@ -94,41 +86,4 @@ fn retrieve_tool_command() -> UserCommand {
             UserCommand::nothing
         }
     }
-}
-
-fn clean_input(input: String) -> String {
-    let first_of_prompt: usize = 0;
-    let last_of_prompt: usize = prompt.chars().count();
-    substring(input, first_of_prompt, last_of_prompt)
-}
-
-fn substring(s: String, start: usize, len: usize) -> String {
-    let mut char_pos = 0;
-    let mut byte_start = 0;
-    let mut it = s.chars();
-
-    // find start position
-    loop {
-        if char_pos == start { break; }
-        if let Some(c) = it.next() {
-            char_pos += 1;
-            byte_start += c.len_utf8();
-        }
-        else { break; }
-    }
-
-    // find end position
-    char_pos = 0;
-    let mut byte_end = byte_start;
-    loop {
-        if char_pos == len { break; }
-        if let Some(c) = it.next() {
-            char_pos += 1;
-            byte_end += c.len_utf8();
-        }
-        else { break; }
-    }
-    
-    // return owned String
-    s[byte_start..byte_end].to_string()
 }

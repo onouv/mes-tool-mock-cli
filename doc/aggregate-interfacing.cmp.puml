@@ -5,29 +5,35 @@ component Inport <<actor>>
 component Process <<actor>>
 component Outport <<actor>>
 
-interface "PushDownstream" as I1 
-interface "PushDownstream" as P1
-interface "PushDownstream" as O1
-interface "Load(Part)" as I0
-interface "StartOperation" as P0
-interface "Unload() -> Part" as O0
+interface "ProcessFinishedSgn" as TF
+interface "StartNextCycleCmd" as IPpd 
+interface "PushDownstreamCmd" as Ppd
+interface "PushDownstreamCmd" as OPpd
+interface "LoadCmd(Part)" as IPl
+interface "StartOperationCmd" as Ps
+interface "AbortOperationCmd" as Pa
+interface "UnloadCmd() -> Part" as OPul
 
-Inport --() I1
-Inport -up-() I0
+Tool --() TF
+
+Inport --() IPpd
+Inport -up-() IPl
  
-Process -left-() P1
-Process-up-() P0
+Process -left-() Ppd
+Process-up-() Ps
+Process-up-() Pa
 
+Outport -left-() OPpd
+Outport -up-() OPul
 
-Outport -left-() O1
-Outport -up-() O0
+Process -right-> OPpd
+Inport -right-> Ppd
 
-Process -right-> O1
-Inport -right-> P1
-
-Tool --> I0 
-Tool -down-> I1
-Tool -down-> P0
-Tool -down-> O0
+Tool --> IPl 
+Process .up.> TF
+Tool -down-> IPpd
+Tool -down-> Ps
+Tool -down-> Pa
+Tool -down-> OPul
 
 @enduml
