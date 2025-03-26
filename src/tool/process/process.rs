@@ -21,15 +21,15 @@ pub struct ProcessSnapshot {
 #[derive(Clone, Copy, Debug)]
 enum State {
     Created,
-    Initialized,
-    OperationRunning,
-    OperationCompleted,
-    HandlingMateialFlow
+    Ready,
+    BusyOperation,
+    BusyMaterialFlow
 }
 
 enum Command {
     Initialize(InitializeChainedActorCmd),
-    
+    PushDownstream(PushDownstreamCmd),
+    StartOperation(StartOperationCmd)
 }
 
 #[derive(Debug)]
@@ -182,7 +182,7 @@ impl Process {
         match (self.state, command) {
             (State::Created, Command::Initialize(cmd)) => {
                 self.handlers = Some(cmd.handlers);
-                self.state = State::Initialized;
+                self.state = State::Ready;
             },
             _ => {}
         }

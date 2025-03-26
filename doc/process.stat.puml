@@ -1,18 +1,20 @@
 @startuml
+note "State Machine Process Actor" as N1
 state Created
 state Ready
-state BusyDownstreamFlow
+state BusyMaterialFlow
 state BusyOperation
-state BusyLoadport
+state Persisting
+
 
 [*] --> Created
-Created --> Ready: InitializeChainedActorCmd(MaterialFlowChainHandlers)
-Ready --> BusyDownstreamFlow: PushDownstreamCmd(Part)
-BusyDownstreamFlow --> Ready: MaterialflowResult(OK)
-BusyDownstreamFlow --> BlockedDownstream: MaterialFlowResult() [downstream actor indicates blocked]
+Created --> Ready: InitializeInlineActorCmd(InlineActorRecipients)
+Ready --> BusyMaterialFlow: PushDownstreamCmd(Part)
+BusyMaterialFlow --> Ready: MaterialflowResult()
 Ready --> BusyOperation: StartOperationCmd()
 BusyOperation --> Ready: CycleTime elapsed
-BlockedDownstream --> BusyLoadport: UnloadCmd
-BusyLoadport --> Ready: done
-
+Ready -> Persisting: ShutdownCmd
+BusyOperation -> Persisting: ShutdownCmd
+BusyMaterialFlow -down-> Persisting: ShutDownCmd
+Persisting -> [*]: Done
 @enduml

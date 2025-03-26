@@ -1,0 +1,13 @@
+@startuml
+note "State Machine Outport Actor" as N1
+
+
+[*] -> Ready
+Ready --> BusyMaterialFlow: PushDownstreamCmd(Part)
+BusyMaterialFlow -> Ready: handling time elapsed\n[buffer not full]\n/ MaterialFlowresult(Ok)
+BusyMaterialFlow --> Blocked: [buffer full] \n/ MaterialFlowResult(Blocked)
+Blocked --> BusyLoadport: UnloadCmd()
+Blocked -> Blocked: PushDownStreamCmd \n/ MaterialFlowResult(Blocked)
+Ready --> BusyLoadport: UnloadCmd()
+BusyLoadport -> Ready: Done\n/ MaterialFlowResult(Ok)
+@enduml
