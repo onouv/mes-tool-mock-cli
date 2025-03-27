@@ -6,13 +6,12 @@ use actix::{
 
 use super::{process::ProcessResult, Part, ProcessFinishedSgn};
 
-pub struct BufferStatus {
-    pub is_full: bool,
-    pub is_empty: bool,
-}
 
-pub trait BufferInfo {
-    fn  buffer_status(&self) -> BufferStatus;
+
+pub trait Buffer {
+    fn buffer_status(&self) -> BufferStatus;
+    fn push(&mut self, part: Part) -> Result<(), MaterialFlowError>;
+    fn pop(&mut self) -> Result<Part, MaterialFlowError>;
 }
 
 pub enum MaterialFlowAction {
@@ -21,9 +20,10 @@ pub enum MaterialFlowAction {
     Unloaded(Part)
 }
 
-pub struct MaterialFlowStatus {
-    pub buffer: BufferStatus,
-    pub action: MaterialFlowAction
+pub enum BufferStatus {
+    Empty,
+    Full,
+    Balanced
 }
 
 pub enum MaterialFlowError {
@@ -34,11 +34,9 @@ pub enum MaterialFlowError {
     EquipmentFailure
 }
 
-
-
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct MaterialFlowResult(pub Result<MaterialFlowStatus, MaterialFlowError>);
+pub struct MaterialFlowResult(pub Result<BufferStatus, MaterialFlowError>);
 
 impl<A, M> MessageResponse<A, M> for MaterialFlowResult
 where
@@ -73,16 +71,8 @@ pub struct UnloadCmd;
 #[rtype(result = "MaterialFlowResult")]
 pub struct PushDownstreamCmd { pub part: Part }
 
-pub trait MaterialFlowSourceActor {
-    fn setHandlers(&mut self, upstream: Recipient<MaterialFlowResult>, downstream: Recipient<PushDownstreamCmd>);
-}
-
-pub trait MaterialFlowChainedActor {
-    fn setHandlers(&mut self, handlers: MaterialFlowChainHandlers);
-}
-
 #[derive(Debug)]
-pub struct MaterialFlowChainHandlers {
+pub struct MaterialFlowInlineHandlers {
     pub downstream: Recipient<PushDownstreamCmd>,
     pub upstream:  Recipient<MaterialFlowResult>,
     pub parent: Recipient<ProcessFinishedSgn>,
@@ -91,6 +81,21 @@ pub struct MaterialFlowChainHandlers {
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct InitializeChainedActorCmd {
-   pub handlers: MaterialFlowChainHandlers
+pub struct InlineActorCfg {
+   pub handlers: MaterialFlowInlineHandlers
 }
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SourceActorCfg {
+    pub upstream: Recipient<MaterialFlowResult>, 
+    pub downstream: Recipient<PushDownstreamCmd>,
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SinkActorCfg {
+    pub upstream: Recipient<MaterialFlowResult>,
+    pub loadport_result: Recipient<MaterialFlowResult>
+}
+

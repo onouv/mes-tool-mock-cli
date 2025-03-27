@@ -5,7 +5,9 @@ use std::fmt::{self, format, Display};
 use std::time::{Duration, Instant};
 
 use super::inport::Inport;
-use super::material_flow::{MaterialFlowChainHandlers, MaterialFlowChainedActor, MaterialFlowResult, MaterialFlowSourceActor, PushDownstreamCmd};
+use super::material_flow::{
+    InlineActorCfg, MaterialFlowChainedActor, MaterialFlowInlineHandlers, MaterialFlowResult, MaterialFlowSourceActor, PushDownstreamCmd, SinkActorCfg, SourceActorCfg, StartNextCycleCmd
+};
 use super::outport::Outport;
 use super::process::ProcessResult;
 use super::StartOperationCmd;
@@ -265,28 +267,54 @@ impl Display for Tool {
     }
 }
 
-pub fn create_tool(id: &str) -> Addr<Tool> {
-    let tool = Tool::new(id);
-    let tool_handle = tool.start();
+pub async fn create_tool(id: &str) -> Addr<Tool> {
 
-    let outport_id = format!("{}.03", id);
-    let outport_handle = Outport::new(outport_id).start();    
+    //
+    // Create and start all actors in raw state
+    //
+    
+    let tool = Tool::new(id).start();   
 
     let inport_id = format!("{}.01", id);
-    let mut inport = Inport::new(inport_id);
-    let inport_handle = inport.start();
+    let mut inport = Inport::new(inport_id).start();
     
     let process_id = format!("{}.02", id);
-    let mut process = Process::new(process_id, PROCESS_OPERATION_TIME);
-    let process_handlers = MaterialFlowChainHandlers {
-        downstream: outport_handle.recipient::<PushDownstreamCmd>(),
-        upstream: inport_handle.recipient::<MaterialFlowResult>(),
-        parent: tool_handle.clone().recipient::<ProcessFinishedSgn>(),
-        parent_result_handler: tool_handle.clone().recipient::<ProcessResult>()
-    };
-    process.setHandlers(process_handlers);
-    let process_handle = process.start();
+    let mut process = Process::new(process_id, PROCESS_OPERATION_TIME).start();
+    
+    let outport_id = format!("{}.03", id);
+    let outport = Outport::new(outport_id).start(); 
 
-    inport.setHandlers(tool_handle.recipient(), process_handle.recipient());
-    tool_handle.clone()
+    let inport_handlers = SourceActorCfg {
+        upstream: tool.clone().recipient::<MaterialFlowResult>(),
+        downstream: process.clone().recipient::<PushDownstreamCmd>()
+    };
+    inport.send(inport_handlers).await;
+
+    //
+    // interconnect all message handlers
+    //
+
+    let process_handlers = MaterialFlowInlineHandlers {
+        downstream: outport.recipient::<PushDownstreamCmd>(),
+        upstream: inport.recipient::<MaterialFlowResult>(),
+        parent: tool.clone().recipient::<ProcessFinishedSgn>(),
+        parent_result_handler: tool.clone().recipient::<ProcessResult>().clone()
+    };
+    process.send(InlineActorCfg{ handlers: process_handlers }).await;
+    
+    let outport_handlers = SinkActorCfg {
+        upstream: process.recipient::<MaterialFlowResult>().clone(),
+        loadport_result: tool.clone().recipient::<MaterialFlowResult>()
+    };
+    outport.send(outport_handlers).await;
+
+    let tool_recipients = ToolActorCfg {
+        downstream: inport.recipient(),
+        load: inport.recipient(),
+        unload: outport.recipient(),
+        start_op: process.recipient(),
+        abort_op: process.recipient()
+    }
+    
+    tool.clone()
 }

@@ -1,7 +1,27 @@
-use actix::prelude::Message;
+use actix::{prelude::Message, Recipient};
 
-use super::{ToolSnapshot, Part};
+use super::{
+    material_flow::{
+        LoadCmd, 
+        StartNextCycleCmd, 
+        UnloadCmd}, 
+    process::{
+        AbortOperationCmd,
+        StartOperationCmd
+    }, 
+    Part, 
+    ToolSnapshot
+};
 
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct ToolActorCfg {
+    pub downstream: Recipient<StartNextCycleCmd>,
+    pub load: Recipient<LoadCmd>,
+    pub unload: Recipient<UnloadCmd>,
+    pub start_op: Recipient<StartOperationCmd>,
+    pub abort_op: Recipient<AbortOperationCmd>
+}
 
 #[derive(Message)]
 #[rtype(result = "ToolSnapshot")]
@@ -10,7 +30,6 @@ pub struct StartCmd;
 #[derive(Message)]
 #[rtype(result = "ToolSnapshot")]
 pub struct StopCmd;
-
 
 #[derive(Message)]
 #[rtype(result = "()")]

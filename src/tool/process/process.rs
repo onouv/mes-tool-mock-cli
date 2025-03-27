@@ -26,10 +26,11 @@ enum State {
     BusyMaterialFlow
 }
 
-enum Command {
-    Initialize(InitializeChainedActorCmd),
+enum ActorEvent {
+    Initialize(InlineActorCfg),
     PushDownstream(PushDownstreamCmd),
-    StartOperation(StartOperationCmd)
+    StartOperation(StartOperationCmd),
+    MaterialFlowResult(MaterialFlowResult)
 }
 
 #[derive(Debug)]
@@ -39,7 +40,7 @@ pub struct Process {
     part: Option<Part>,
     cycle_time: Duration,
     operation: Option<SpawnHandle>,
-    handlers: Option<MaterialFlowChainHandlers>,
+    handlers: Option<MaterialFlowInlineHandlers>,
     downstream_blocked: bool,
     is_operating: bool,
     material_flow_action_pending: bool
@@ -178,9 +179,9 @@ impl Process {
         }
     }
 
-    pub fn next(&mut self, command: Command) {
+    pub fn next(&mut self, command: ActorEvent) {
         match (self.state, command) {
-            (State::Created, Command::Initialize(cmd)) => {
+            (State::Created, ActorEvent::Initialize(cmd)) => {
                 self.handlers = Some(cmd.handlers);
                 self.state = State::Ready;
             },
@@ -197,10 +198,10 @@ impl Process {
     }
 }
 
-impl Handler<InitializeChainedActorCmd> for Process {
+impl Handler<InlineActorCfg> for Process {
     type Result = ();
 
-    fn handle(&mut self, msg: InitializeChainedActorCmd, ctx: &mut Self::Context) -> Self::Result {
+    fn handle(&mut self, msg: InlineActorCfg, ctx: &mut Self::Context) -> Self::Result {
         self.handle(msg, ctx)
     }
 }
