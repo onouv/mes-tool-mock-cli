@@ -7,7 +7,6 @@ use actix::{
 use super::{process::ProcessResult, Part, ProcessFinishedSgn};
 
 
-
 pub trait Buffer {
     fn buffer_status(&self) -> BufferStatus;
     fn push(&mut self, part: Part) -> Result<(), MaterialFlowError>;

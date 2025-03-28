@@ -3,7 +3,7 @@
 //
 
 pub mod tool;
-pub use tool::Tool;
+pub use tool::*;
 
 #[cfg(test)]
 mod tests;

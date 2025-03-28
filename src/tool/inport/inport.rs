@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use actix::prelude::*;
+use actix::{fut::future::result, prelude::*};
 
 use crate::tool::{material_flow::*, process::StartOperationCmd, Part};
 
@@ -16,10 +16,10 @@ enum ActorState {
 
 enum ActorEvent {
     Initialize(SourceActorCfg),
-    PushDownstream(PushDownstreamCmd),
     StartNextCycle(StartNextCycleCmd),
     StartOperation(StartOperationCmd),
-    MaterialFlowResult(MaterialFlowResult)
+    MaterialFlowResult(MaterialFlowResult),
+    LoadCmd(LoadCmd)
 }
 
 /// 
@@ -44,14 +44,7 @@ impl Actor for Inport {
 
 }
 
-enum TransitionResult {
-    MFResult(MaterialFlowResult),
-    Nothing(())
-}
-
-
 impl Inport {
-
     
     pub fn new(id: String) -> Self {
 
@@ -64,24 +57,62 @@ impl Inport {
         }
     }
 
-    fn next_state(&mut self, event: ActorEvent) -> TransitionResult {
+    fn next_state(&mut self, event: ActorEvent) -> Option<MaterialFlowResult> {
         match (self.state, event) {
             (ActorState::UnInitialized, ActorEvent::Initialize(cmd)) => {
                 self.downstream = Some(cmd.downstream);
                 self.upstream = Some(cmd.upstream);
                 self.state = ActorState::Ready;
 
-                TransitionResult::Nothing(())
+                return None;
             },
             (ActorState::Ready, ActorEvent::StartNextCycle(cmd)) => {
-                let buffer_status = self.buffer_status();
-                if buffer_status.is_empty {
-                    TransitionResult::MFResult(
+                match self.buffer_status() {
+                    BufferStatus::Empty => {
+                        // no state change...
                         
-                        MaterialFlowResult(Ok(MaterialFlowStatus { buffer: (), action: () })))
+                        return Some(MaterialFlowResult(
+                                Ok(self.buffer_status())));
+                    },
+                    _ => {
+                        self.state = ActorState::BusyMaterialFlow;
+
+                        return Some(self.push_part_downstream());
+                    }
                 }
+            },
+            (ActorState::Ready, ActorEvent::LoadCmd(part)) => {
+                return Some(self.push(part));
+            },
+            _ => { return None;}
+        }
+    }
+
+    fn push_part_downstream(&self) -> MaterialFlowResult {
+        match self.pop() {
+            Ok(part) => {
+                match self.downstream.try_send(PushDownstreamCmd { part: part.clone() }) {
+                    Ok(()) => {                        
+                        self.is_handling = false;
+
+                        MaterialFlowResult(Ok(self.buffer_status()))
+                    },
+                    Err(error) => {
+                        let s_n = part.serial_no.clone();
+                        println!("Inport {}: Failure to push part {} to downstream actor: {}",
+                            self.id, s_n, error);
+
+                        // we must still maintain hold of the part
+                        self.buffer.push_back(part);
+                        
+                        MaterialFlowResult(Err(MaterialFlowError::EquipmentFailure))
+                    }
+                }
+            },
+            Err(error) => {
+
+                MaterialFlowResult(Err(error))
             }
-            _ => {}
         }
     }
 }
@@ -142,39 +173,24 @@ impl Handler<UnloadCmd> for Inport {
 impl Handler<StartNextCycleCmd> for Inport {
     type Result = MaterialFlowResult;
 
-    fn handle(&mut self, msg: PushDownstreamCmd, ctx: &mut Self::Context) -> Self::Result {
-        if self.is_handling {
-            return MaterialFlowResult(Err(MaterialFlowError::Busy));
-        }
-        self.is_handling = true;
+    fn handle(&mut self, msg: StartNextCycleCmd, ctx: &mut Self::Context) -> Self::Result {
 
-        match self.pop() {
-            Ok(part) => {
-                match self.downstream.try_send(PushDownstreamCmd { part: part.clone() }) {
-                    Ok(()) => {                        
-                        self.is_handling = false;
-
-                        MaterialFlowResult(Ok(MaterialFlowStatus { 
-                            buffer: self.buffer_status(),
-                            action: MaterialFlowAction::PushedDownstream 
-                        }))
+        match self.next_state(ActorEvent::StartNextCycle(())) {
+            MaterialFlowResult(result) => result,
+            None => {
+                let mut error: MaterialFlowError; 
+                match self.state {
+                    ActorState::BusyMaterialFlow => {
+                        error = MaterialFlowError::Busy;
                     },
-                    Err(error) => {
-                        let s_n = part.serial_no.clone();
-                        println!("Inport {}: Failure to push part {} to downstream actor: {}",
-                            self.id, s_n, error);
-
-                        // we must still maintain hold of the part
-                        self.buffer.push_back(part);
-                        
-                        MaterialFlowResult(Err(MaterialFlowError::EquipmentFailure))
+                    ActorState::BusyOperation => {
+                        error = MaterialFlowError::Busy;
+                    },
+                    ActorState::BlockedByDownstream =>  {
+                        error - MaterialFlowError::BlockedByDownstream;
                     }
                 }
-            },
-            Err(error) => {
-                self.is_handling = false;
-
-                MaterialFlowResult(Err(error))
+                return MaterialFlowResult(Err(error));
             }
         }
     }
@@ -214,7 +230,7 @@ impl Buffer for Inport {
             (false, false) => BufferStatus::Balanced,
             (true, false) => BufferStatus::Empty,
             (false, true) => BufferStatus::Full,
-            (true, true) => { unimplemented!()}
+            (true, true) => { unimplemented!()} // not gonna happen
         }
     }
 }

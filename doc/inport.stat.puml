@@ -1,4 +1,5 @@
 @startuml
+note "Inport State Machine" as N1
 [*] -down-> UnInitialized
 UnInitialized -> Ready: Initialize(SourceActorCfg)
 Ready -down-> BusyLoadport: LoadCmd(Part)
@@ -9,7 +10,7 @@ BusyLoadport -down-> BlockedByDownstream: [buffer full] \n/ MaterialFlowResult(B
 BlockedByDownstream -> BlockedByDownstream: LoadCmd(Part) \n/ MaterialFlowResult(Blocked)
 BlockedByDownstream -> BusyLoadport: UnloadCmd
 
-Ready -up-> BusyMaterialFlow: StartNextCycleCmd()\n[buffer not empty]\n/ MaterialFlowCmd(Ok)
+Ready -up-> BusyMaterialFlow: StartNextCycleCmd()\n[buffer not empty]\n/ MaterialFlowResult(Ok)
 BusyMaterialFlow -> Ready: handling time elapsed\n/ MaterialFlowresult(Ok)
 
 @enduml
