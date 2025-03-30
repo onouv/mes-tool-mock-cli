@@ -1,72 +1,81 @@
 use std::collections::VecDeque;
 use actix::{fut::future::result, prelude::*};
 
-use crate::tool::{material_flow::*, process::StartOperationCmd, Part};
-
-static INPORT_BUFFER_SIZE: usize = 10;
+use crate::tool::{
+    Part,
+    material_flow::*, 
+    load_port::*,
+    //process::{StartOperationCmd}
+};
 
 #[derive(Copy, Clone, Debug)]
-enum ActorState {
+enum InportState {
     UnInitialized,
     Ready,
-    BusyOperation,
-    BusyMaterialFlow,
-    BlockedByDownstream
+    BusyLoadPort,
+    BusyMaterialFlow
 }
 
-enum ActorEvent {
+enum InportEvent {
     Initialize(SourceActorCfg),
-    StartNextCycle(StartNextCycleCmd),
-    StartOperation(StartOperationCmd),
-    MaterialFlowResult(MaterialFlowResult),
-    LoadCmd(LoadCmd)
+    StartNextCycle(StartNextCycleCmd),    
+    LoadCommand(LoadCmd),    
+    UnloadCommand(UnloadCmd),    
 }
 
-/// 
-/// Outport is a material flow source.
-/// 
-/// It can handle commands to:
-/// - load part from the upstream user into its buffer 
-/// - unload a part from its buffer back upstream to the user
-/// - push a part to a downstream downstream recipient (FIFO)
-///
+enum TransitionRes {
+    Initialize,
+    Unload(UnloadRes),
+    Load(LoadRes),
+    MaterialFlow(MaterialFlowResult),
+    NoTransition
+}
+
+
 #[derive(Debug)]
 pub struct Inport {
     id: String,
-    state: ActorState,
-    buffer: VecDeque<Part>,
+    state: InportState,
+    buffer: Buffer,
+    user_load_client: Option<Recipient<LoadRes>>,
+    user_unload_client: Option<Recipient<UnloadRes>>,
     downstream: Option<Recipient<PushDownstreamCmd>>,
     upstream: Option<Recipient<MaterialFlowResult>>,
 }
 
 impl Actor for Inport {
     type Context = Context<Self>;
-
 }
 
 impl Inport {
     
-    pub fn new(id: String) -> Self {
+    pub fn new(id: String, capacity: usize) -> Self {
 
         Self {
             id,
-            state: ActorState::UnInitialized,
-            buffer: VecDeque::default(),
+            state: InportState::UnInitialized,
+            buffer: Buffer::new(capacity),
+            user_load_client: None,
+            user_unload_client: None,
             downstream: None,
             upstream: None,
         }
     }
 
-    fn next_state(&mut self, event: ActorEvent) -> Option<MaterialFlowResult> {
+    fn next_state(&mut self, event: InportEvent) -> TransitionRes {
+        let mut txRes: TransitionRes;
+        
         match (self.state, event) {
-            (ActorState::UnInitialized, ActorEvent::Initialize(cmd)) => {
-                self.downstream = Some(cmd.downstream);
-                self.upstream = Some(cmd.upstream);
-                self.state = ActorState::Ready;
+            (InportState::UnInitialized, InportEvent::Initialize(cfg)) => {
+                self.user_load_client = Some(cfg.user_load);
+                self.user_unload_client = Some(cfg.user_unload);
+                self.downstream = Some(cfg.downstream);
+                self.upstream = Some(cfg.upstream);
+                self.state = InportState::Ready;
 
-                return None;
+                TransitionRes::Initialize
             },
-            (ActorState::Ready, ActorEvent::StartNextCycle(cmd)) => {
+            (InportState::Ready, InportEvent::StartNextCycle(cmd)) => {
                 match self.buffer_status() {
                     BufferStatus::Empty => {
                         // no state change...
@@ -75,17 +84,23 @@ impl Inport {
                                 Ok(self.buffer_status())));
                     },
                     _ => {
-                        self.state = ActorState::BusyMaterialFlow;
+                        self.state = InportState::BusyMaterialFlow;
 
                         return Some(self.push_part_downstream());
                     }
                 }
             },
-            (ActorState::Ready, ActorEvent::LoadCmd(part)) => {
-                return Some(self.push(part));
+            (InportState::Ready, InportEvent::LoadCommand(cmd)) => {
+                TransitionRes::Load(self.buffer.push(cmd.part))
             },
-            _ => { return None;}
+            (InportState::Ready, InportEvent::UnloadCommand(cmd)) => {
+                TransitionRes::Unload(self.buffer.pop())
+            }
+            _ => { 
+                TransitionRes::NoTransition
+            }
         }
+
     }
 
     fn push_part_downstream(&self) -> MaterialFlowResult {
@@ -121,52 +136,36 @@ impl Handler<SourceActorCfg> for Inport {
     type Result = ();
 
     fn handle(&mut self, msg: SourceActorCfg, ctx: &mut Self::Context) -> Self::Result {
-        self.next_state(ActorEvent::Initialize(msg));
+        self.next_state(InportEvent::Initialize(msg));
     }
 }
 
 impl Handler<LoadCmd> for Inport {
-    type Result = MaterialFlowResult;
+    type Result = MessageResult<LoadCmd>;
 
-    fn handle(&mut self, msg: LoadCmd, _ctx: &mut Self::Context) -> Self::Result {
-    
-        // reject new parts while still handling downstream push 
-        // to protect against overflow of part buffer 
-        if self.is_handling {
-            return MaterialFlowResult(Err(MaterialFlowError::Busy));
-        }
+    fn handle(&mut self, cmd: LoadCmd, _ctx: &mut Self::Context) -> Self::Result {
+        
+        let part = cmd.part.clone();
 
-        match self.push(msg.part) {
-            Ok(()) => {
-                return MaterialFlowResult(Ok(MaterialFlowStatus {
-                    buffer: self.buffer_status(),
-                    action: MaterialFlowAction::PushedDownstream
-                }));
+        match self.next_state(InportEvent::LoadCommand(cmd)) {
+            TransitionRes::Load(result) => {
+                MessageResult(result)
             },
-            Err(error) => {
-                return MaterialFlowResult(Err(error));
+            _ => {
+                MessageResult(LoadRes(Err(LoadError{
+                    part,
+                    reason: LoadErrorReason::InvalidState 
+                })))
             }
         }
     }
 }
 
 impl Handler<UnloadCmd> for Inport {
-    type Result = MaterialFlowResult;
+    type Result = UnloadRes;
 
-    fn handle(&mut self, msg: UnloadCmd, _ctx: &mut Self::Context) -> Self::Result {
-        match self.pop() {
-            Ok(part) => {
-                MaterialFlowResult(Ok(
-                    MaterialFlowStatus { 
-                        buffer: self.buffer_status(), 
-                        action: MaterialFlowAction::Unloaded(part) 
-                    }
-                ))
-            },
-            Err(error) => {
-                MaterialFlowResult(Err(error))
-            }
-        }
+    fn handle(&mut self, cmd: UnloadCmd, _ctx: &mut Self::Context) -> Self::Result {
+        self.next_state(InportEvent::UnloadCommand(cmd))
     }
 }
 
@@ -175,18 +174,18 @@ impl Handler<StartNextCycleCmd> for Inport {
 
     fn handle(&mut self, msg: StartNextCycleCmd, ctx: &mut Self::Context) -> Self::Result {
 
-        match self.next_state(ActorEvent::StartNextCycle(())) {
+        match self.next_state(InportEvent::StartNextCycle(())) {
             MaterialFlowResult(result) => result,
             None => {
                 let mut error: MaterialFlowError; 
                 match self.state {
-                    ActorState::BusyMaterialFlow => {
+                    InportState::BusyMaterialFlow => {
                         error = MaterialFlowError::Busy;
                     },
-                    ActorState::BusyOperation => {
+                    InportState::BusyOperation => {
                         error = MaterialFlowError::Busy;
                     },
-                    ActorState::BlockedByDownstream =>  {
+                    InportState::BlockedByDownstream =>  {
                         error - MaterialFlowError::BlockedByDownstream;
                     }
                 }
@@ -204,33 +203,3 @@ impl Handler<MaterialFlowResult> for Inport {
     }
 }
 
-impl Buffer for Inport {
-
-    fn push(&mut self, part: Part) -> Result<(), MaterialFlowError>{
-        if self.buffer.len() < INPORT_BUFFER_SIZE {
-            self.buffer.push_front(part);
-            return Ok(());
-        }
-
-        Err(MaterialFlowError::Full)
-    }
-
-    fn pop(&mut self) -> Result<Part, MaterialFlowError> {
-        if let part = self.buffer.pop_back() {
-            return Ok(part.unwrap());
-        }
-
-        Err(MaterialFlowError::Empty)
-    }
-    
-    fn buffer_status(&self) -> BufferStatus {
-        let is_full = self.buffer.len() >= INPORT_BUFFER_SIZE;
-        let is_empty = self.buffer.is_empty();
-        match (is_empty, is_full) {
-            (false, false) => BufferStatus::Balanced,
-            (true, false) => BufferStatus::Empty,
-            (false, true) => BufferStatus::Full,
-            (true, true) => { unimplemented!()} // not gonna happen
-        }
-    }
-}

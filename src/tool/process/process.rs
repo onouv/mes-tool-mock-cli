@@ -40,7 +40,7 @@ pub struct Process {
     part: Option<Part>,
     cycle_time: Duration,
     operation: Option<SpawnHandle>,
-    handlers: Option<MaterialFlowInlineHandlers>,
+    handlers: Option<InlineActorConnections>,
     downstream_blocked: bool,
     is_operating: bool,
     material_flow_action_pending: bool
@@ -182,7 +182,7 @@ impl Process {
     pub fn next(&mut self, command: ActorEvent) {
         match (self.state, command) {
             (State::Created, ActorEvent::Initialize(cmd)) => {
-                self.handlers = Some(cmd.handlers);
+                self.handlers = Some(cmd.connections);
                 self.state = State::Ready;
             },
             _ => {}

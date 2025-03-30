@@ -5,9 +5,9 @@ note "State Machine Outport Actor" as N1
 [*] -> Ready
 Ready --> BusyMaterialFlow: PushDownstreamCmd(Part)
 BusyMaterialFlow -> Ready: handling time elapsed\n[buffer not full]\n/ MaterialFlowresult(Ok)
-BusyMaterialFlow --> Blocked: [buffer full] \n/ MaterialFlowResult(Blocked)
-Blocked --> BusyLoadport: UnloadCmd()
-Blocked -> Blocked: PushDownStreamCmd \n/ MaterialFlowResult(Blocked)
+BusyMaterialFlow --> Full: [buffer full] \n/ MaterialFlowResult(Ok(Full))
+Full --> BusyLoadport: UnloadCmd()/ start handling time
+Full -> Full: PushDownStreamCmd \n/ MaterialFlowResult(Err(part, Full))
 Ready --> BusyLoadport: UnloadCmd()
-BusyLoadport -> Ready: Done\n/ MaterialFlowResult(Ok)
+BusyLoadport -> Ready: handling time elapsed\n/ MaterialFlowResult(Ok(Ready))
 @enduml

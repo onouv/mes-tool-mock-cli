@@ -1,10 +1,8 @@
 use actix::{prelude::Message, Recipient};
 
 use super::{
-    material_flow::{
-        LoadCmd, 
-        StartNextCycleCmd, 
-        UnloadCmd}, 
+    material_flow::StartNextCycleCmd,
+    load_port::{LoadCmd, LoadRes, UnloadCmd},
     process::{
         AbortOperationCmd,
         StartOperationCmd
@@ -36,7 +34,7 @@ pub struct StopCmd;
 pub struct ProcessFinishedSgn;
 
 #[derive(Message, Debug)]
-#[rtype(result = "ToolSnapshot")]
+#[rtype(result = "LoadRes")]
 pub struct LoadPartCmd {
     pub part: Part
 }

@@ -6,9 +6,6 @@ Ready -down-> BusyLoadport: LoadCmd(Part)
 Ready -> BusyLoadport: UnloadCmd()
 Ready -> Ready: StartNextCycleCmd\n[buffer empty]\n/ MaterialFlowResult(Empty)
 BusyLoadport -> Ready: handling time elapsed\n[buffer not full]\n/ MaterialFlowresult(Ok)
-BusyLoadport -down-> BlockedByDownstream: [buffer full] \n/ MaterialFlowResult(Blocked)
-BlockedByDownstream -> BlockedByDownstream: LoadCmd(Part) \n/ MaterialFlowResult(Blocked)
-BlockedByDownstream -> BusyLoadport: UnloadCmd
 
 Ready -up-> BusyMaterialFlow: StartNextCycleCmd()\n[buffer not empty]\n/ MaterialFlowResult(Ok)
 BusyMaterialFlow -> Ready: handling time elapsed\n/ MaterialFlowresult(Ok)

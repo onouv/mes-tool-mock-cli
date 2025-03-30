@@ -6,7 +6,12 @@ use std::time::{Duration, Instant};
 
 use super::inport::Inport;
 use super::material_flow::{
-    InlineActorCfg, MaterialFlowChainedActor, MaterialFlowInlineHandlers, MaterialFlowResult, MaterialFlowSourceActor, PushDownstreamCmd, SinkActorCfg, SourceActorCfg, StartNextCycleCmd
+    InlineActorCfg, 
+    SourceActorCfg,
+    MaterialFlowResult, 
+    PushDownstreamCmd, 
+    SinkActorCfg, 
+    StartNextCycleCmd
 };
 use super::outport::Outport;
 use super::process::ProcessResult;
@@ -25,15 +30,17 @@ static PROCESS_OPERATION_TIME: Duration = Duration::from_secs(5);
 pub struct Tool {
     id: String,
     inport: Option<Inport>,
-    process: Option<Process>,
-    outport: Outport,
-    state: ToolState
+    // process: Option<Process>,
+    // outport: Outport,
+    state: ToolState,
+    load_pending: bool,
+    unload_pending: bool
 }
 
 impl Actor for Tool {
     type Context = Context<Self>;
 }
-
+/* 
 impl Handler<StartCmd> for Tool {
     type Result = ToolSnapshot;
     fn handle(&mut self, _msg: StartCmd, ctx: &mut Context<Self>) -> Self::Result {
@@ -124,9 +131,9 @@ impl Handler<ProcessFinishedSgn> for Tool {
     }
 
 }
-
+ */
 impl Handler<LoadPartCmd> for Tool {
-    type Result = ToolSnapshot;
+    type Result = LoadResult;
 
     fn handle(&mut self, msg: LoadPartCmd, ctx: &mut Context<Self>) -> Self::Result {
 
@@ -164,6 +171,15 @@ impl Handler<LoadPartCmd> for Tool {
     }
 }
 
+impl Handler<LoadRes> for Tool {
+    type Result = ();
+
+    fn handle(&mut self, msg: LoadRes, ctx: &mut Self::Context) -> Self::Result {
+        
+    }
+
+}
+/* 
 impl Handler<UnloadPartCmd> for Tool {
     type Result =  MessageResult<UnloadPartCmd>;
 
@@ -237,19 +253,19 @@ impl Handler<ProcessResult> for Tool {
         
     }
 }
-
+ */
 impl Tool {
     pub fn new(id: &str) -> Self {
         Tool {
             id: id.to_string(),
             inport: VecDeque::new(),
-            process: Process::new(id.push_str("-").push_str(id)),
-            outport: VecDeque::new(),
+            // process: Process::new(id.push_str("-").push_str(id)),
+            // outport: VecDeque::new(),
             state: ToolState::STOPPED
         }
     }    
 
-    fn snapshot(&self) -> ToolSnapshot {
+    /* fn snapshot(&self) -> ToolSnapshot {
         ToolSnapshot {
             id: self.id.clone(),
             parts_inport: self.inport.len(),
@@ -258,7 +274,7 @@ impl Tool {
             parts_outport: self.outport.len(),
             state: self.state.clone()
         }
-    }
+    } */
 }
 
 impl Display for Tool {
@@ -276,7 +292,7 @@ pub async fn create_tool(id: &str) -> Addr<Tool> {
     let tool = Tool::new(id).start();   
 
     let inport_id = format!("{}.01", id);
-    let mut inport = Inport::new(inport_id).start();
+    let mut inport = Inport::new(inport_id, 4).start();
     
     let process_id = format!("{}.02", id);
     let mut process = Process::new(process_id, PROCESS_OPERATION_TIME).start();
@@ -285,22 +301,20 @@ pub async fn create_tool(id: &str) -> Addr<Tool> {
     let outport = Outport::new(outport_id).start(); 
 
     let inport_handlers = SourceActorCfg {
-        upstream: tool.clone().recipient::<MaterialFlowResult>(),
-        downstream: process.clone().recipient::<PushDownstreamCmd>()
+        user_load: tool.clone().recipient()
+        // upstream: tool.clone().recipient::<MaterialFlowResult>(),
+        // downstream: process.clone().recipient::<PushDownstreamCmd>()
     };
     inport.send(inport_handlers).await;
 
     //
     // interconnect all message handlers
     //
-
-    let process_handlers = MaterialFlowInlineHandlers {
+    process.send(InlineActorCfg {         
         downstream: outport.recipient::<PushDownstreamCmd>(),
         upstream: inport.recipient::<MaterialFlowResult>(),
         parent: tool.clone().recipient::<ProcessFinishedSgn>(),
-        parent_result_handler: tool.clone().recipient::<ProcessResult>().clone()
-    };
-    process.send(InlineActorCfg{ handlers: process_handlers }).await;
+        parent_result_handler: tool.recipient::<ProcessResult>().clone() }).await;
     
     let outport_handlers = SinkActorCfg {
         upstream: process.recipient::<MaterialFlowResult>().clone(),

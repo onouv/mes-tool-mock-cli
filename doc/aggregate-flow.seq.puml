@@ -1,6 +1,6 @@
 @startuml
 !pragma teoz true
-actor User
+
 participant "<<actor>>\nTool" as Tool
 participant "<<actor>>\nInport" as Inport
 participant "<<actor>>\nProcess" as Process
@@ -8,49 +8,67 @@ participant "<<actor>>\nOutport" as Outport
 
 note across: SCENARIO:\n* A stopped tool is started,\n* 2 parts buffered in the inport are streamed down.\n* After the second part, outport has filled up and blocks the chain.\n* Tool goes to IDLE. 
 note over Tool: STOPPED
-note over Inport: [part6, part5, part4];\ndownstream_blocked: false
-note over Process:  [part3]\nis_busy: false\ndownstream_blocked: false
-note over Outport: [part2, part1]\nis_full: false
+note over Inport: [part6, part5, part4];\nReady
+note over Process:  [part3]\nis_busy: false\nReady
+note over Outport: [part2, part1]\nReady
 
-User -> Tool: StartCmd
+[-> Tool: StartCmd
 Tool -> Inport: StartNextCycleCmd()
+note over Inport: [part6, part5];\nBusyMaterialFlow
 Inport -> Process: PushDownStreamCmd(part4)
+note over Process: [part4; part3];\nBusyMaterialFlow
 Process --> Process: part3 = self.swap(part4)
 Process -> Outport: PushDownStreamCmd(part3)
 Outport --> Outport
-note over Outport: [part3, part2, part1]
-Process <- Outport: MaterialFlowResult(Ok(PushedDownstream))
-note over Process:  [part4]\nis_busy: false\ndownstream_blocked: false
+note over Outport: [part3, part2, part1]\nReady
+Process <- Outport: MaterialFlowResult(Ok(Ready))
+note over Process:  [part4]\nReady
 Inport <- Process: MaterialFlowResult(Ok(PushedDownstream))
-note over Inport: [part6, part5];\ndownstream_blocked: false
-Tool <- Inport: MaterialFlowResult(Ok())
+note over Inport: [part6, part5]\nReady
+Tool <- Inport: MaterialFlowResult(Ok(Ready))
 
 Tool -> Process: StartOperationCmd()
+note over Process: [part4]\nBusyOperation
 Process --> Process: part4 = simulate_outcome()
-{start} Process -> Future ** : spawn
-Future --> Future: sleep(PROCESS_CYCLE_TIME)
-Process --> Process: is_busy = true
-Tool <- Process: ProcessResult(OK())
-note over Tool: RUNNING
-User <- Tool: ToolResult(Ok())
 
-{end} Tool <- Future: ProcessFinished
+{start} Process -> Future ** : spawn
+Tool <- Process: ProcessResult(OK())
+Future --> Future: sleep(PROCESS_CYCLE_TIME)
+note over Tool: RUNNING
+[<- Tool: ToolResult(Ok())
+{end} Process <- Future: ProcessFinished
 {start} <-> {end}: PROCESS_CYCLE_TIME
 Future --> Future !!
+note over Process: [part4]\nReady
+Tool <- Process: ProcessFinished
+
 Tool -> Inport: StartNextCycleCmd()
+note over Inport: [part6]\nBusyMaterialFlow
 Inport -> Process: PushDownStreamCmd(part5)
+note over Process: [part5, part4]\nBusyMaterialFlow
 Process --> Process: part4 = self.swap(part5)
 Process -> Outport: PushDownStreamCmd(part4)
 Outport --> Outport
-note over Outport: [part4, part3, part2, part1]\n(buffer is full)
-Process <- Outport: MaterialFlowResult(Ok(Full))
-note over Process: [part5]\ndownstream_blocked: true
-Inport <- Process: MaterialFlowResult(Ok(BlockedByDownStream))
-note over Inport: [part6],\ndownstream_blocked: true
-Tool <- Inport: MaterialFlowResult(Ok())
+note over Outport: [part4, part3, part2, part1]\nBlocked
+Process <- Outport: MaterialFlowResult(Ok(Ready))
+note over Process: [part5]\nReady
+Inport <- Process: MaterialFlowResult(Ok(Ready))
+note over Inport: [part6],\nReady
+Tool <- Inport: MaterialFlowResult(Ok(Ready))
 
 Tool -> Inport: StartNexCycleCmd()
-Tool <- Inport: MaterialFlowResult(Err(BlockedByDownStream))
+note over Inport: []\nBusyMaterialFlow
+Inport -> Process: PushDownstreamCmd(part6)
+note over Process: [part6, part5]\nBusyMaterialFlow
+Process --> Process: part5 = self.swap(part6)
+Process -> Outport: PushDownstreamCmd(part5)
+Process <- Outport: MaterialFlowResult(Err(Full))
+Process --> Process: part6 = self.swap(part5)
+Inport <- Process: MaterialFlowResult(Err(part6, Blocked))
+note over Process: [part5]\nReady
+Inport -> Inport: self.buffer.push_back(part6)
+note over Inport: [part6]\nReady
+Tool <- Inport: MaterialFlowResult(Err(Blocked))
 note over Tool: IDLE
 
 @enduml

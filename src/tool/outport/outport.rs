@@ -76,6 +76,12 @@ impl Handler<PushDownstreamCmd> for Outport {
                 }));
             },
             Err(error) => {
+                match error {
+                    MaterialFlowError::BlockedByDownStream(p) => {
+                        println!("Huhu !");
+                    },
+                    _ => {}
+                }
                 return MaterialFlowResult(Err(error));
             }
         }

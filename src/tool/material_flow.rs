@@ -4,56 +4,31 @@ use actix::{
     Message, Recipient
 };
 
-use super::{process::ProcessResult, Part, ProcessFinishedSgn};
-
-
-pub trait Buffer {
-    fn buffer_status(&self) -> BufferStatus;
-    fn push(&mut self, part: Part) -> Result<(), MaterialFlowError>;
-    fn pop(&mut self) -> Result<Part, MaterialFlowError>;
-}
-
-pub enum MaterialFlowAction {
-    Loaded,
-    PushedDownstream,
-    Unloaded(Part)
-}
-
-pub enum BufferStatus {
-    Empty,
-    Full,
-    Balanced
-}
+use super::{ProcessResult, LoadRes, Part, ProcessFinishedSgn, UnloadRes};
 
 pub enum MaterialFlowError {
-    Full,
-    BlockedByDownstream,
-    Empty,
-    Busy,
-    EquipmentFailure
+    BufferFull,
+    BlockedByDownStream(Part),
+    BufferEmpty,
+    EquipmentFailure,
+    Unknown
 }
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct MaterialFlowResult(pub Result<BufferStatus, MaterialFlowError>);
+pub struct MaterialFlowResult(pub Result<(), MaterialFlowError>);
 
-impl<A, M> MessageResponse<A, M> for MaterialFlowResult
-where
-    A: Actor,
-    M: Message<Result = MaterialFlowResult>,
-{
-    fn handle(self, ctx: &mut A::Context, tx: Option<OneshotSender<M::Result>>) {
-        if let Some(tx) = tx {
-            let _ = tx.send(self);
-        }
-    }
-}
-
-#[derive(Message)]
-#[rtype(result = "MaterialFlowResult")]
-pub struct LoadCmd {
-    pub part: Part
-}
+// impl<A, M> MessageResponse<A, M> for MaterialFlowResult
+// where
+//     A: Actor,
+//     M: Message<Result = MaterialFlowResult>,
+// {
+//     fn handle(self, ctx: &mut A::Context, tx: Option<OneshotSender<M::Result>>) {
+//         if let Some(tx) = tx {
+//             let _ = tx.send(self);
+//         }
+//     }
+// }
 
 #[derive(Message)]
 #[rtype(result = "MaterialFlowResult")]
@@ -61,17 +36,11 @@ pub struct StartNextCycleCmd;
 
 #[derive(Message)]
 #[rtype(result = "MaterialFlowResult")]
-pub struct UnloadCmd;
-
-/// Accept incoming part and push next part in line to downstream recipient.
-/// This operation is expected to continue in chain down the stream.
-/// 
-#[derive(Message)]
-#[rtype(result = "MaterialFlowResult")]
 pub struct PushDownstreamCmd { pub part: Part }
 
-#[derive(Debug)]
-pub struct MaterialFlowInlineHandlers {
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct InlineActorCfg {
     pub downstream: Recipient<PushDownstreamCmd>,
     pub upstream:  Recipient<MaterialFlowResult>,
     pub parent: Recipient<ProcessFinishedSgn>,
@@ -80,15 +49,11 @@ pub struct MaterialFlowInlineHandlers {
 
 #[derive(Message)]
 #[rtype(result = "()")]
-pub struct InlineActorCfg {
-   pub handlers: MaterialFlowInlineHandlers
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
 pub struct SourceActorCfg {
-    pub upstream: Recipient<MaterialFlowResult>, 
-    pub downstream: Recipient<PushDownstreamCmd>,
+    pub user_load: Recipient<LoadRes>,
+    // pub user_unload: Recipient<UnloadRes>,
+    // pub upstream: Recipient<MaterialFlowResult>, 
+    // pub downstream: Recipient<PushDownstreamCmd>,
 }
 
 #[derive(Message)]
