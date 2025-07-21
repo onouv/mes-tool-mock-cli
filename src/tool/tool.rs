@@ -26,8 +26,11 @@ static INPORT_CAPACITY: usize = 3;
 static OUTPORT_CAPACITY: usize = 3;
 static PROCESS_OPERATION_TIME: Duration = Duration::from_secs(5);
 
-#[derive(Debug)]
 pub struct Tool {
+    inport: Addr<Inport>
+}
+
+pub struct ToolActor {
     id: String,
     inport: Option<Inport>,
     // process: Option<Process>,
@@ -37,7 +40,7 @@ pub struct Tool {
     unload_pending: bool
 }
 
-impl Actor for Tool {
+impl Actor for ToolActor {
     type Context = Context<Self>;
 }
 /* 
@@ -132,7 +135,7 @@ impl Handler<ProcessFinishedSgn> for Tool {
 
 }
  */
-impl Handler<LoadPartCmd> for Tool {
+impl Handler<LoadPartCmd> for ToolActor {
     type Result = LoadResult;
 
     fn handle(&mut self, msg: LoadPartCmd, ctx: &mut Context<Self>) -> Self::Result {
@@ -171,7 +174,7 @@ impl Handler<LoadPartCmd> for Tool {
     }
 }
 
-impl Handler<LoadRes> for Tool {
+impl Handler<LoadRes> for ToolActor {
     type Result = ();
 
     fn handle(&mut self, msg: LoadRes, ctx: &mut Self::Context) -> Self::Result {
@@ -179,7 +182,7 @@ impl Handler<LoadRes> for Tool {
     }
 
 }
-/* 
+
 impl Handler<UnloadPartCmd> for Tool {
     type Result =  MessageResult<UnloadPartCmd>;
 
@@ -253,10 +256,10 @@ impl Handler<ProcessResult> for Tool {
         
     }
 }
- */
-impl Tool {
+
+impl ToolActor {
     pub fn new(id: &str) -> Self {
-        Tool {
+        ToolActor {
             id: id.to_string(),
             inport: VecDeque::new(),
             // process: Process::new(id.push_str("-").push_str(id)),
@@ -277,19 +280,19 @@ impl Tool {
     } */
 }
 
-impl Display for Tool {
+impl Display for ToolActor {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Tool {} in state {}", self.id, self.state)
     }
 }
 
-pub async fn create_tool(id: &str) -> Addr<Tool> {
+pub async fn create_tool(id: &str) -> Addr<ToolActor> {
 
     //
     // Create and start all actors in raw state
     //
     
-    let tool = Tool::new(id).start();   
+    let tool = ToolActor::new(id).start();   
 
     let inport_id = format!("{}.01", id);
     let mut inport = Inport::new(inport_id, 4).start();
