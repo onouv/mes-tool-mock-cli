@@ -1,0 +1,25 @@
+@startuml
+[-> Tool: unload().await
+activate Tool
+Tool -> OutportActor: send(UnloadCmd).await
+note over OutportActor: Ready
+activate OutportActor
+OutportActor --> OutportActor: next_state()
+activate OutportActor
+Tool <-- OutportActor: Ok(PartUnloaded(part)))
+OutportActor --> ToolActor: PartUnloadedEvt()
+deactivate OutportActor
+deactivate OutportActor
+activate ToolActor
+ToolActor --> ToolActor: next_state()
+activate ToolActor
+note over ToolActor: may update state to Running\nif it was blocked by outport
+deactivate ToolActor
+deactivate ToolActor 
+deactivate OutportActor
+deactivate OutportActor
+
+[<-- Tool: Ok(PartUnloaded(part)))
+deactivate Tool
+
+@enduml

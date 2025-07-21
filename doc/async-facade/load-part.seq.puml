@@ -1,0 +1,49 @@
+@startuml
+
+[-> Tool: 1.1 load(Part).await
+activate Tool
+Tool -> InportActor: 1.2 send(Load(Part)).await
+activate InportActor
+{start} InportActor -> Future **: 1.3: spawn
+InportActor --> InportActor: 1.4 next_state()
+note over InportActor: BusyLoadPort
+Future --> Future: 1.5 sleep(handling_time)
+Tool <-- InportActor: 1.6 Ok
+deactivate InportActor
+[<-- Tool: 1.7 Ok
+deactivate Tool
+note over ToolActor: Stopped
+{end} InportActor <- Future: 1.8 HandlingFinished
+destroy Future
+{start} <-> {end}: handling_time
+activate InportActor
+InportActor -> ToolActor: 1.9: do_send(PartLoaded)
+ToolActor --> ToolActor: 1.10 next_state()
+InportActor --> InportActor: 1.11 next_state()
+note over InportActor: Ready
+deactivate InportActor
+note over ToolActor: Stopped
+
+[-> Tool : 2.1 GetSnapshotCmd
+activate Tool
+Tool -> ToolActor: 2.2 do_send(GetSnapshotCmd).await
+activate ToolActor
+ToolActor --> ToolActor: 2.3.1 collecting_snapshots = true
+ToolActor -> InportActor: 2.3.2 do_send(GetSnapshotCmd)
+activate InportActor
+ToolActor ->  ProcessActor: 2.3.3 do_send(GetSnapShotCmd)
+activate ProcessActor
+ToolActor ->  OutportActor: 2.3.4 do_send(GetSnapShotCmd)
+activate OutportActor
+ToolActor <- ProcessActor: ProcessSnapShot
+deactivate ProcessActor
+ToolActor <- OutportActor: LoadPortSnapShot
+deactivate OutportActor
+ToolActor <- InportActor: LoadPortSnapShot
+deactivate InportActor
+ToolActor --> ToolActor: 2.3.5 collecting_snapshots = false
+Tool <-- ToolActor: 2.4 ToolSnapShot 
+deactivate ToolActor
+[<-- Tool: 2.5 ToolSnapShot
+deactivate Tool
+@enduml

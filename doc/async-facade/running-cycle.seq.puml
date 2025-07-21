@@ -1,0 +1,80 @@
+@startuml
+participant Tool
+note over ToolActor: Stopped
+note over InportActor: [part6, part5, part4];\nReady
+note over ProcessActor:  [part3]\nReady
+note over OutportActor: [part2, part1]\nReady
+[-> Tool: start().await
+activate Tool
+Tool -> ToolActor: send(StartCmd).await
+activate ToolActor
+ToolActor --> ToolActor: next_state()
+activate ToolActor
+ToolActor -> InportActor: try_send(StartNewCycle())
+activate InportActor
+ToolActor <-- InportActor: (())
+deactivate ToolActor
+Tool <-- ToolActor: ControlRes(Ok, Running)
+deactivate ToolActor
+[<-- Tool: ControlRes(Ok, Running)
+deactivate Tool
+note over ToolActor: Running
+
+InportActor --> InportActor: next_state()
+InportActor --> Future1 **: spawn
+Future1 --> Future1: sleep(handling_time)
+note over InportActor: [part6, part5, part4]\nBusyMaterialFlow
+
+deactivate InportActor
+
+
+
+== inport handling_time elapsed ==
+
+InportActor <- Future1: do_send(HandlingFinishedEvt)
+destroy Future1
+activate InportActor
+InportActor --> InportActor: next_state()
+activate InportActor
+InportActor -> ProcessActor: try_send(PushDownStreamCmd(part4))
+activate ProcessActor
+
+ProcessActor --> ProcessActor: next_state()
+activate ProcessActor
+ProcessActor --> ProcessActor: part3 = swap(part4)
+note over ProcessActor: [part4, part3]\nBusyMaterialFlow
+ProcessActor -> OutportActor: try_send(PushDownStream(part3))
+activate OutportActor
+deactivate ProcessActor
+deactivate ProcessActor
+
+OutportActor --> OutportActor: next_state()
+activate OutportActor
+OutportActor -> Future2 **: spawn()
+ProcessActor <- OutportActor: MaterialFlowResult(Ok())
+deactivate OutportActor
+deactivate OutportActor
+Future2 --> Future2: sleep(handling_time)
+
+
+InportActor <- ProcessActor: (())
+deactivate InportActor
+deactivate InportActor
+note over InportActor: [part6, part5]\nBusyMaterialFlow
+
+== outport handling_time elapsed ==
+OutportActor <- Future2: do_send(HandlingFinishedEvt)
+activate OutportActor
+OutportActor --> OutportActor: next_state()
+activate OutportActor
+
+ProcessActor <- OutportActor: MaterialFlowresult(Ok)
+activate ProcessActor
+ProcessActor --> ProcessActor: next_state()
+activate ProcessActor
+InportActor <- ProcessActor: Ok
+deactivate ProcessActor
+deactivate ProcessActor
+
+
+@enduml
